@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.log
 .vite/
+
+# Family photos and third-party references for map research stay local only.
+docs/map/photos/
