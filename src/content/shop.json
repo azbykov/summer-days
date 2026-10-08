@@ -1,0 +1,32 @@
+{
+  "opens": "09:00",
+  "closes": "21:00",
+  "grandmaGivesRubles": 10,
+  "errandItem": "blackBread",
+  "items": [
+    {
+      "id": "blackBread",
+      "price": 4
+    },
+    {
+      "id": "loaf",
+      "price": 5
+    },
+    {
+      "id": "lemonade",
+      "price": 4
+    },
+    {
+      "id": "iceCream",
+      "price": 3
+    },
+    {
+      "id": "gum",
+      "price": 1
+    },
+    {
+      "id": "prima",
+      "price": 3
+    }
+  ]
+}

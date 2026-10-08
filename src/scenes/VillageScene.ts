@@ -2,12 +2,12 @@ import Phaser from 'phaser';
 import worldConfig from '../content/world.json';
 import { GameClock } from '../systems/GameClock';
 import { DialogueBox } from '../ui/DialogueBox';
+import { InventoryPanel } from '../ui/InventoryPanel';
 import { DayEvents } from '../world/DayEvents';
 import { buildLayout, type Block, type BlockKind, type Layout, type Road } from '../world/layout';
 
 const PX = worldConfig.pxPerMeter;
 const WALK_SPEED = worldConfig.walkSpeedMetersPerSecond * PX;
-const BIKE_SPEED = worldConfig.bikeSpeedMetersPerSecond * PX;
 const BIKE_REACH = worldConfig.bikeReachMeters * PX;
 
 const COLOR_GRASS = 0x4f6b3a;
@@ -16,8 +16,10 @@ const COLOR_BIKE_FRAME = 0x8fa3a0;
 const COLOR_BIKE_TYRE = 0x1e1e1c;
 const COLOR_GRANDMA = 0x8a5a9a;
 const COLOR_GRANDPA = 0x5a6a8a;
+const COLOR_SELLER = 0x4a6a8a;
 const COLOR_COW = 0x4a3a30;
 const COLOR_COW_OURS = 0xb86a30;
+const COLOR_IZH = 0x9a2a22;
 
 const ROAD_COLORS: Record<Road['kind'], number> = {
   sand: 0xb8a27a,
@@ -38,13 +40,22 @@ const BLOCK_COLORS: Record<BlockKind, number> = {
   garage: 0x6a6a64,
   garageFloor: 0x8a8a80,
   workbench: 0x7a5a38,
-  motorcycle: 0x7a2a22,
   field: 0x6a8f48,
   square: 0x6a7448,
   treeBelt: 0x2f4a26,
   water: 0x3c6e8f,
   beach: 0xcdb98a,
   forest: 0x2c4424,
+};
+
+/** Something the player rides: it gathers speed, coasts, and stays where it is left. */
+type Vehicle = {
+  image: Phaser.GameObjects.Image;
+  riderTexture: string;
+  speed: number;
+  secondsToFullSpeed: number;
+  coastSecondsToStop: number;
+  onDismount?: () => void;
 };
 
 /**
@@ -54,15 +65,17 @@ const BLOCK_COLORS: Record<BlockKind, number> = {
 export class VillageScene extends Phaser.Scene {
   private clock = new GameClock();
   private player!: Phaser.Physics.Arcade.Sprite;
-  /** The bicycle stays wherever it was left; hidden while ridden. */
-  private bike!: Phaser.GameObjects.Image;
-  private riding = false;
+  /** Vehicles stay wherever they were left; hidden while ridden. */
+  private bike!: Vehicle;
+  private izh!: Vehicle;
+  private riding: Vehicle | null = null;
   /** One prompt for whatever the player can do right here. */
   private hint!: Phaser.GameObjects.Text;
   private useKey!: Phaser.Input.Keyboard.Key;
   private noKey!: Phaser.Input.Keyboard.Key;
   private numberKeys!: Phaser.Input.Keyboard.Key[];
   private dialogue!: DialogueBox;
+  private inventoryPanel!: InventoryPanel;
   private day!: DayEvents;
   private overlay!: Phaser.GameObjects.Rectangle;
   private dayOver = false;
@@ -95,7 +108,23 @@ export class VillageScene extends Phaser.Scene {
     solid.forEach((b) => this.addBlock(b));
     layout.blocks.filter((b) => b.label).forEach((b) => this.addLabel(b));
 
-    this.bike = this.add.image(layout.bikeStart.x * PX, layout.bikeStart.y * PX, 'bike').setDepth(1);
+    this.bike = {
+      image: this.add.image(layout.bikeStart.x * PX, layout.bikeStart.y * PX, 'bike').setDepth(1),
+      riderTexture: 'rider',
+      speed: worldConfig.bikeSpeedMetersPerSecond * PX,
+      secondsToFullSpeed: worldConfig.bikeSecondsToFullSpeed,
+      coastSecondsToStop: worldConfig.bikeCoastSecondsToStop,
+    };
+    const izhStart = layout.spots.motorcycle;
+    this.izh = {
+      image: this.add.image(izhStart.x * PX, izhStart.y * PX, 'izh').setDepth(1),
+      riderTexture: 'izhRider',
+      speed: worldConfig.izhSpeedMetersPerSecond * PX,
+      secondsToFullSpeed: worldConfig.izhSecondsToFullSpeed,
+      coastSecondsToStop: worldConfig.izhCoastSecondsToStop,
+      // Getting off stalls the engine.
+      onDismount: () => this.day.motorcycle.stopEngine(),
+    };
     this.hint = this.add
       .text(0, 0, '', { fontFamily: 'monospace', fontSize: '12px', color: '#f4efe0', backgroundColor: '#00000088', padding: { x: 3, y: 1 } })
       .setOrigin(0.5, 1)
@@ -116,7 +145,7 @@ export class VillageScene extends Phaser.Scene {
     >;
     this.useKey = this.input.keyboard!.addKey('E');
     this.noKey = this.input.keyboard!.addKey('Q');
-    this.numberKeys = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'].map((k) => this.input.keyboard!.addKey(k));
+    this.numberKeys = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'].map((k) => this.input.keyboard!.addKey(k));
 
     this.clockText = this.add
       .text(12, 10, '', { fontFamily: 'monospace', fontSize: '18px', color: '#e8e2cf' })
@@ -138,8 +167,14 @@ export class VillageScene extends Phaser.Scene {
       PX,
       (then, holdMs) => this.fadeThrough(then, holdMs),
       (title) => this.endDay(title),
+      {
+        position: () => ({ x: this.izh.image.x / PX, y: this.izh.image.y / PX }),
+        ride: () => this.mount(this.izh),
+      },
     );
-    if (!this.devStart(layout)) this.day.start();
+    this.inventoryPanel = new InventoryPanel(this, this.day.inventory);
+    if (this.devStart(layout)) this.day.skipMorning();
+    else this.day.start();
   }
 
   /**
@@ -153,7 +188,7 @@ export class VillageScene extends Phaser.Scene {
     if (!at) return false;
     this.clock.advance((start === 'garage' ? 12 * 60 : 18 * 60 + 50) - this.clock.minutes);
     this.player.body!.reset(at.x * PX, at.y * PX);
-    this.bike.setPosition((at.x + 3) * PX, (at.y + 1) * PX);
+    this.bike.image.setPosition((at.x + 3) * PX, (at.y + 1) * PX);
     this.cameras.main.centerOn(at.x * PX, at.y * PX);
     return true;
   }
@@ -165,6 +200,7 @@ export class VillageScene extends Phaser.Scene {
     const here = { x: this.player.x / PX, y: this.player.y / PX };
     // The world keeps going during conversations: the herd does not wait.
     this.day.update(here, delta / 1000);
+    this.inventoryPanel.refresh();
 
     if (this.dialogue.open || this.overlay.alpha > 0) {
       if (Phaser.Input.Keyboard.JustDown(this.useKey)) this.dialogue.press('use');
@@ -175,13 +211,34 @@ export class VillageScene extends Phaser.Scene {
       return;
     }
 
+    // Q opens and closes what the player carries; in a conversation it means "no".
+    if (Phaser.Input.Keyboard.JustDown(this.noKey)) this.inventoryPanel.toggle();
+    // With the inventory open, a number picks a slot.
+    if (this.inventoryPanel.open) {
+      const picked = this.numberKeys.findIndex((k) => Phaser.Input.Keyboard.JustDown(k));
+      if (picked >= 0) {
+        this.player.setVelocity(0, 0);
+        this.day.useSlot(picked);
+        return;
+      }
+    }
+
     const direction = new Phaser.Math.Vector2(0, 0);
     if (this.cursors.left.isDown || this.keys.A.isDown) direction.x -= 1;
     if (this.cursors.right.isDown || this.keys.D.isDown) direction.x += 1;
     if (this.cursors.up.isDown || this.keys.W.isDown) direction.y -= 1;
     if (this.cursors.down.isDown || this.keys.S.isDown) direction.y += 1;
 
-    // People and the door come first; the bike otherwise.
+    const vehicle = this.riding;
+    if (vehicle) {
+      // Riding: E gets off; talking and doors need feet on the ground.
+      if (Phaser.Input.Keyboard.JustDown(this.useKey)) this.dismount();
+      this.hint.setVisible(false);
+      this.ride(vehicle, direction, delta);
+      return;
+    }
+
+    // People, the door and the IZH come first; the bike otherwise.
     const action = this.day.interactionAt(here);
     if (Phaser.Input.Keyboard.JustDown(this.useKey)) {
       if (action) {
@@ -189,27 +246,26 @@ export class VillageScene extends Phaser.Scene {
         action.run();
         return;
       }
-      if (this.riding) this.dismount();
-      else if (this.nearBike()) this.mount();
+      if (this.nearBike()) this.mount(this.bike);
     }
     if (action) {
       this.hint.setText(action.hint).setPosition(action.at.x * PX, action.at.y * PX - 16).setVisible(true);
     } else {
-      this.hint.setText('E — сесть').setPosition(this.bike.x, this.bike.y - 14).setVisible(!this.riding && this.nearBike());
+      const bike = this.bike.image;
+      this.hint.setText('E — сесть').setPosition(bike.x, bike.y - 14).setVisible(this.nearBike());
     }
 
-    if (!this.riding) {
-      direction.normalize().scale(WALK_SPEED);
-      this.player.setVelocity(direction.x, direction.y);
-      return;
-    }
+    direction.normalize().scale(WALK_SPEED);
+    this.player.setVelocity(direction.x, direction.y);
+  }
 
-    // The bike gathers speed and coasts instead of stopping dead.
-    const pedalling = direction.lengthSq() > 0;
-    const target = direction.normalize().scale(BIKE_SPEED);
+  /** Vehicles gather speed and coast instead of stopping dead. */
+  private ride(vehicle: Vehicle, direction: Phaser.Math.Vector2, delta: number): void {
+    const pushing = direction.lengthSq() > 0;
+    const target = direction.normalize().scale(vehicle.speed);
     const body = this.player.body as Phaser.Physics.Arcade.Body;
-    const seconds = pedalling ? worldConfig.bikeSecondsToFullSpeed : worldConfig.bikeCoastSecondsToStop;
-    const maxChange = (BIKE_SPEED / seconds) * (delta / 1000);
+    const seconds = pushing ? vehicle.secondsToFullSpeed : vehicle.coastSecondsToStop;
+    const maxChange = (vehicle.speed / seconds) * (delta / 1000);
     const change = target.subtract(body.velocity);
     if (change.length() > maxChange) change.setLength(maxChange);
     body.velocity.add(change);
@@ -251,22 +307,27 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private nearBike(): boolean {
-    return Phaser.Math.Distance.Between(this.player.x, this.player.y, this.bike.x, this.bike.y) < BIKE_REACH;
+    const bike = this.bike.image;
+    return Phaser.Math.Distance.Between(this.player.x, this.player.y, bike.x, bike.y) < BIKE_REACH;
   }
 
-  private mount(): void {
-    this.riding = true;
-    this.bike.setVisible(false);
-    this.player.setPosition(this.bike.x, this.bike.y).setTexture('rider').setRotation(this.bike.rotation);
+  private mount(vehicle: Vehicle): void {
+    this.riding = vehicle;
+    const { image } = vehicle;
+    image.setVisible(false);
+    this.player.body!.reset(image.x, image.y);
+    this.player.setTexture(vehicle.riderTexture).setRotation(image.rotation);
   }
 
-  /** Leave the bike exactly where the player stopped. */
+  /** Leave the vehicle exactly where the player stopped. */
   private dismount(): void {
-    this.riding = false;
-    this.bike.setPosition(this.player.x, this.player.y).setRotation(this.player.rotation).setVisible(true);
-    // Step off to the right of the bike so it stays visible.
+    const vehicle = this.riding!;
+    this.riding = null;
+    vehicle.image.setPosition(this.player.x, this.player.y).setRotation(this.player.rotation).setVisible(true);
+    vehicle.onDismount?.();
+    // Step off to the right so the vehicle stays visible.
     const side = this.player.rotation;
-    this.player.body!.reset(this.player.x + Math.cos(side) * PX * 1.2, this.player.y + Math.sin(side) * PX * 1.2);
+    this.player.body!.reset(this.player.x + Math.cos(side) * PX * 1.4, this.player.y + Math.sin(side) * PX * 1.4);
     this.player.setTexture('player').setRotation(0);
   }
 
@@ -293,7 +354,18 @@ export class VillageScene extends Phaser.Scene {
     graphics.fillRect(2, 8, 10, 9);
     graphics.generateTexture('rider', 14, 24);
 
-    for (const [key, color] of [['grandma', COLOR_GRANDMA], ['grandpa', COLOR_GRANDPA], ['kid', 0xffffff]] as const) {
+    // Top-down IZH pointing up: ~0.8 x 2.1 m, red tank in the middle.
+    graphics.clear();
+    this.drawIzh(graphics);
+    graphics.generateTexture('izh', 16, 26);
+
+    graphics.clear();
+    this.drawIzh(graphics);
+    graphics.fillStyle(COLOR_PLAYER, 1);
+    graphics.fillRect(3, 11, 10, 9);
+    graphics.generateTexture('izhRider', 16, 26);
+
+    for (const [key, color] of [['grandma', COLOR_GRANDMA], ['grandpa', COLOR_GRANDPA], ['seller', COLOR_SELLER], ['kid', 0xffffff]] as const) {
       graphics.clear();
       graphics.fillStyle(color, 1);
       graphics.fillRect(0, 0, 14, key === 'kid' ? 18 : 22);
@@ -315,6 +387,17 @@ export class VillageScene extends Phaser.Scene {
     graphics.generateTexture('ball', 6, 6);
 
     graphics.destroy();
+  }
+
+  private drawIzh(graphics: Phaser.GameObjects.Graphics): void {
+    graphics.fillStyle(COLOR_BIKE_TYRE, 1);
+    graphics.fillRect(6, 0, 4, 7);
+    graphics.fillRect(6, 19, 4, 7);
+    graphics.fillStyle(COLOR_IZH, 1);
+    graphics.fillRect(4, 7, 8, 12);
+    graphics.fillStyle(COLOR_BIKE_FRAME, 1);
+    // Handlebar.
+    graphics.fillRect(1, 5, 14, 2);
   }
 
   private drawBike(graphics: Phaser.GameObjects.Graphics): void {

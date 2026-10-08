@@ -43,8 +43,13 @@ E next to the bicycle gets on it; E again gets off and leaves the bike where you
 stopped. The bicycle starts the day in grandma's back yard.
 
 E next to a person talks; E advances the conversation. When someone asks a
-question, E is yes and Q is no; when there are several things to do, 1–5 picks
-one and Q steps away. E at grandma's front door goes inside — from 19:00 on,
+question, E is yes and Q is no; when there are several things to do, a number
+picks one and Q steps away.
+
+Q outside a conversation opens and closes what you carry: five slots with
+items, and the money in the pocket. Same things stack; a sixth kind of thing
+does not fit. With it open, 1–5 picks a slot: ice cream can be eaten,
+«Буратино» drunk, gum chewed. It does nothing else, on purpose. E at grandma's front door goes inside — from 19:00 on,
 that ends the day.
 
 ### Development starts
@@ -72,7 +77,7 @@ tools/map-editor/        local editor for map research (docs/map/)
 ## Current state
 
 The MVP map is laid out on real coordinates: Vysokaya, both roads to Shestovo,
-grandpa's yard and garage, and the swimming spot by the reservoir. Buildings are
+grandpa's yard and garage (moved behind the club for the MVP), and the swimming spot by the reservoir. Buildings are
 placeholder boxes; neighbour houses along the streets are generated. Labels over
 landmarks are a temporary development aid.
 
@@ -82,7 +87,10 @@ The day from `docs/MVP.md` plays out, with placeholder figures:
 
 - grandma in the front garden sends the player to grandpa and asks to be back
   by seven for the cow;
-- grandpa in Shestovo, by his house and garage;
+- grandma also gives 10 rubles for a loaf of black bread from the kiosk by the
+  bus stop (open 9:00–21:00); the change is the player's to spend there;
+- grandpa by his house and garage behind the club; grandma tells the way if
+  asked;
 - local kids at the school field, 10:00–17:00, offer a game; playing takes an
   hour of game time;
 - the herd walks in along the Bralgino road from the map edge, reaches the bus
@@ -91,16 +99,21 @@ The day from `docs/MVP.md` plays out, with placeholder figures:
 - in the evening grandma reacts to how the day went; going inside ends the day
   with «2 ИЮНЯ».
 
-Times, counts and distances are in `src/content/day.json`; all lines are in
-`src/content/dialogue.json`.
+Goods and prices are in `src/content/shop.json`; item names and their 12×12
+pixel icons in `src/content/items.json`. Times, counts and distances are
+in `src/content/day.json`; all lines are in
+`src/content/dialogue.json`. Whoever speaks shows a 32×32 pixel face on the
+left of the dialogue box; the faces are drawn as character grids in
+`src/content/portraits.json`, one letter per pixel, colours in its palette.
 
 Grandpa's garage stands open: the IZH inside, the workbench at the back wall.
 The motorcycle has three hidden facts — no fuel, a fouled plug, air fine — that
 the player learns only by looking. The spark plug key is on the workbench, the
-canister under it. With fuel and a clean plug the engine catches once and dies;
-grandpa comments on the first failed kick and on the first start. The IZH does
-not become transport in the MVP. Grandma's evening lines mention it if the
-player tried.
+canister under it. With fuel and a clean plug the engine first catches once and
+dies, and grandpa says «О. Живой ещё». After that it starts and the IZH can be
+ridden — faster than the bike. Getting off stalls it where it stands; the next
+ride needs the kickstarter again. Grandma's evening lines mention the IZH if the
+player tried it.
 
 The layout reads anchors from `src/content/geography.json`. After editing the map
 in the editor, regenerate it:

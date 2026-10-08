@@ -43,7 +43,6 @@ export type BlockKind =
   | 'garage'
   | 'garageFloor'
   | 'workbench'
-  | 'motorcycle'
   | 'field'
   | 'square'
   | 'treeBelt'
@@ -69,6 +68,10 @@ export type Layout = {
     barnDoor: Point;
     herdMeeting: Point;
     football: Block;
+    /** The kiosk-container by the bus stop: where the seller sits and where the player stands. */
+    seller: Point;
+    counter: Point;
+    /** Where the IZH stands at the start of the day. */
     motorcycle: Point;
     workbench: Point;
     /** Just outside the open garage, for starting the game there while developing. */
@@ -98,7 +101,8 @@ export function buildLayout(): Layout {
   const mainRoute = place('nb819wu');
   const kindergartenRoute = place('wqdz7sd');
   const [center, turn] = [mainRoute[1], mainRoute[2]];
-  const grandpa = at('s36bcyl');
+  // Where the marked grandpa's house really is: the end of both roads, in Shestovo.
+  const shestovo = at('s36bcyl');
   const swim = at('s5nmj0h');
   const merge = mainRoute[mainRoute.length - 2];
 
@@ -124,7 +128,7 @@ export function buildLayout(): Layout {
     {
       kind: 'path',
       width: PATH_WIDTH,
-      points: [offset(grandpa, -15, 2), { x: (grandpa.x + swim.x) / 2 + 20, y: (grandpa.y + swim.y) / 2 }, { x: swim.x, y: shoreY + 5 }],
+      points: [offset(shestovo, -15, 2), { x: (shestovo.x + swim.x) / 2 + 20, y: (shestovo.y + swim.y) / 2 }, { x: swim.x, y: shoreY + 5 }],
     },
   ];
 
@@ -137,6 +141,10 @@ export function buildLayout(): Layout {
   const ourField = at('qh8gjbr');
 
   const schoolFieldBlock: Block = { kind: 'field', x: schoolField.x, y: schoolField.y, w: 40, h: 25, solid: false, label: 'школьное поле' };
+  // Moved for the MVP: grandpa lives in Vysokaya, right behind the club, so the
+  // visit is a short walk from the centre (docs/MAP.md, «Дом деда»).
+  const grandpa = { x: club.x + 10, y: club.y - 40 };
+
   // Grandpa's garage stands open towards the yard: walls on three sides, the IZH
   // inside and the workbench along the back wall, canister underneath.
   const garageBox = { x: grandpa.x - 10, y: grandpa.y - 10, w: 7, h: 8 };
@@ -149,8 +157,8 @@ export function buildLayout(): Layout {
     { kind: 'garage', x: garageBox.x - garageBox.w / 2 + wall / 2, y: garageBox.y, w: wall, h: garageBox.h, solid: true },
     { kind: 'garage', x: garageBox.x + garageBox.w / 2 - wall / 2, y: garageBox.y, w: wall, h: garageBox.h, solid: true },
     { kind: 'workbench', x: workbench.x, y: workbench.y, w: 3, h: 0.8, solid: true },
-    { kind: 'motorcycle', x: motorcycle.x, y: motorcycle.y, w: 0.8, h: 2.1, solid: true },
   ];
+  const kioskBox = { x: kiosk.x + 4, y: kiosk.y + 2, w: 6, h: 2.5 };
   const grandmaHouse: Block = { kind: 'grandmaHouse', x: 0, y: 0, w: 10, h: 8, solid: true, label: 'дом бабушки' };
   const clubBlock: Block = { kind: 'club', x: club.x + 6, y: club.y - 4, w: 30, h: 20, solid: true, label: 'клуб' };
 
@@ -162,7 +170,7 @@ export function buildLayout(): Layout {
     // Open centre: stop, kiosk, herd meeting point, memorial and club, no houses in between.
     { kind: 'square', ...boxAround([stop, kiosk, herdMeeting, memorial, club], 15), solid: false },
     { kind: 'busStop', x: stop.x, y: stop.y + 2, w: 6, h: 2.5, solid: true, label: 'остановка' },
-    { kind: 'kiosk', x: kiosk.x + 4, y: kiosk.y + 2, w: 6, h: 2.5, solid: true, label: 'контейнер' },
+    { kind: 'kiosk', ...kioskBox, solid: true, label: 'контейнер' },
     { kind: 'shop', ...offset(at('m5fb8fg'), 6, 0), w: 10, h: 8, solid: true, label: 'хозмаг' },
     clubBlock,
     { kind: 'memorial', x: memorial.x, y: memorial.y, w: 3, h: 3, solid: true, label: 'стела' },
@@ -185,7 +193,7 @@ export function buildLayout(): Layout {
     ...edgeForest(bounds, shoreY),
   ];
 
-  const houses = generateHouses(roads.filter((r) => r.kind !== 'path'), landmarks, bounds, shoreY);
+  const houses = generateHouses(roads, landmarks, bounds, shoreY);
 
   return {
     bounds,
@@ -202,6 +210,8 @@ export function buildLayout(): Layout {
       barnDoor: { x: grandmaHouse.w / 2 + 1.5, y: grandmaHouse.h / 2 + 4 },
       herdMeeting,
       football: schoolFieldBlock,
+      seller: { x: kioskBox.x, y: kioskBox.y },
+      counter: { x: kioskBox.x, y: kioskBox.y + kioskBox.h / 2 + 1 },
       motorcycle,
       workbench,
       garageFront: { x: garageBox.x, y: garageBox.y + garageBox.h / 2 + 2 },
@@ -234,7 +244,8 @@ function generateHouses(roads: Road[], landmarks: Block[], bounds: Bounds, shore
   const setback = STREET_WIDTH / 2 + 9;
   let seed = 1;
 
-  for (const road of roads) {
+  // Houses line the streets; footpaths only need to stay clear.
+  for (const road of roads.filter((r) => r.kind !== 'path')) {
     for (let i = 0; i < road.points.length - 1; i++) {
       const a = road.points[i];
       const b = road.points[i + 1];

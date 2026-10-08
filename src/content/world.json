@@ -4,5 +4,8 @@
   "bikeSpeedMetersPerSecond": 13.5,
   "bikeSecondsToFullSpeed": 1.5,
   "bikeCoastSecondsToStop": 3,
-  "bikeReachMeters": 2.5
+  "bikeReachMeters": 2.5,
+  "izhSpeedMetersPerSecond": 17,
+  "izhSecondsToFullSpeed": 2.5,
+  "izhCoastSecondsToStop": 4
 }

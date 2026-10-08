@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import portraits from '../content/portraits.json';
 
 export type Line = [speaker: string, text: string];
 
@@ -6,17 +7,24 @@ type Choice = { onYes: () => void; onNo: () => void };
 
 export type Option = { label: string; run: () => void };
 
+const PORTRAIT_SIZE = Object.values(portraits.faces)[0].length * portraits.scale;
+const PANEL_HEIGHT = PORTRAIT_SIZE + 16;
+const MARGIN = 12;
+const PADDING = 16;
+
 /**
- * Plain speech at the bottom of the screen. No portraits, no quest log:
- * people just say things (docs/GAME_DESIGN.md, «Минимум quest markers»).
+ * Plain speech at the bottom of the screen, with a pixel face of whoever is
+ * speaking on the left. No quest log: people just say things
+ * (docs/GAME_DESIGN.md, «Минимум quest markers»).
  *
  * E advances. A conversation can end in a yes/no question: E — yes, Q — no,
- * or in a short list of things to do: 1–5 picks one, Q leaves.
+ * or in a short list of things to do: a number picks one, Q leaves.
  */
 export class DialogueBox {
   private panel: Phaser.GameObjects.Rectangle;
   private text: Phaser.GameObjects.Text;
   private hint: Phaser.GameObjects.Text;
+  private portrait: Phaser.GameObjects.Image;
   private lines: Line[] = [];
   private choice: Choice | null = null;
   private options: Option[] = [];
@@ -25,22 +33,27 @@ export class DialogueBox {
   constructor(scene: Phaser.Scene) {
     const { width, height } = scene.scale;
     this.panel = scene.add
-      .rectangle(width / 2, height - 12, width - 24, 92, 0x14160f, 0.88)
+      .rectangle(width / 2, height - MARGIN, width - MARGIN * 2, PANEL_HEIGHT, 0x14160f, 0.88)
       .setOrigin(0.5, 1)
       .setStrokeStyle(1, 0x6a6a5a)
       .setScrollFactor(0)
       .setDepth(20);
     this.text = scene.add
-      .text(28, height - 96, '', {
+      .text(0, height - MARGIN - PANEL_HEIGHT + 12, '', {
         fontFamily: 'monospace',
         fontSize: '18px',
         color: '#f4efe0',
-        wordWrap: { width: width - 56 },
+        wordWrap: { width: width },
       })
       .setScrollFactor(0)
       .setDepth(21);
+    DialogueBox.createPortraits(scene);
+    this.portrait = scene.add
+      .image(MARGIN + 8 + PORTRAIT_SIZE / 2, height - MARGIN - PANEL_HEIGHT / 2, '__DEFAULT')
+      .setScrollFactor(0)
+      .setDepth(21);
     this.hint = scene.add
-      .text(width - 28, height - 22, '', { fontFamily: 'monospace', fontSize: '13px', color: '#a8a48c' })
+      .text(width - MARGIN - PADDING, height - MARGIN - 10, '', { fontFamily: 'monospace', fontSize: '13px', color: '#a8a48c' })
       .setOrigin(1, 1)
       .setScrollFactor(0)
       .setDepth(21);
@@ -105,6 +118,14 @@ export class DialogueBox {
 
   private showNext(): void {
     const [speaker, text] = this.lines.shift()!;
+    // Narration (no speaker) and people without a face show no portrait.
+    const key = portraitKey(speaker);
+    const face = this.portrait.scene.textures.exists(key);
+    this.portrait.setVisible(face);
+    if (face) this.portrait.setTexture(key);
+    // Text starts right of the face, or at the panel edge for narration.
+    const left = MARGIN + PADDING + (face ? PORTRAIT_SIZE + PADDING / 2 : 0);
+    this.text.setX(left).setWordWrapWidth(this.portrait.scene.scale.width - left - MARGIN - PADDING);
     // An empty speaker is narration: what the player sees or hears.
     this.text.setText(speaker ? `${speaker}: ${text}` : text);
     this.updateHint();
@@ -113,7 +134,8 @@ export class DialogueBox {
   private updateHint(): void {
     const last = this.lines.length === 0;
     if (last && this.options.length > 0) {
-      const list = this.options.map((o, i) => `${i + 1} — ${o.label}`).join('   ');
+      // Non-breaking spaces keep each option whole when the line wraps.
+      const list = this.options.map((o, i) => `${i + 1} — ${o.label}`.replace(/ /g, '\u00a0')).join('   ');
       this.text.setText(`${this.text.text.split('\n')[0]}\n${list}`);
       this.hint.setText('Q — отойти');
     } else {
@@ -132,5 +154,30 @@ export class DialogueBox {
     this.panel.setVisible(visible);
     this.text.setVisible(visible);
     this.hint.setVisible(visible);
+    if (!visible) this.portrait.setVisible(false);
   }
+
+  /** Draw every face from content/portraits.json once, pixel by pixel. */
+  private static createPortraits(scene: Phaser.Scene): void {
+    const { scale, palette, faces } = portraits;
+    for (const [speaker, rows] of Object.entries(faces)) {
+      const key = portraitKey(speaker);
+      if (scene.textures.exists(key)) continue;
+      const graphics = scene.make.graphics({ x: 0, y: 0 }, false);
+      rows.forEach((row, y) =>
+        [...row].forEach((pixel, x) => {
+          const color = palette[pixel as keyof typeof palette];
+          if (!color) return;
+          graphics.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, 1);
+          graphics.fillRect(x * scale, y * scale, scale, scale);
+        }),
+      );
+      graphics.generateTexture(key, PORTRAIT_SIZE, PORTRAIT_SIZE);
+      graphics.destroy();
+    }
+  }
+}
+
+function portraitKey(speaker: string): string {
+  return `portrait:${speaker}`;
 }

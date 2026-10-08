@@ -1,10 +1,14 @@
 import Phaser from 'phaser';
 import day from '../content/day.json';
 import dialogue from '../content/dialogue.json';
+import items from '../content/items.json';
+import shopConfig from '../content/shop.json';
 import { clockTime, type GameClock } from '../systems/GameClock';
-import type { DialogueBox, Line } from '../ui/DialogueBox';
+import type { DialogueBox, Line, Option } from '../ui/DialogueBox';
 import { Herd } from './Herd';
 import { Motorcycle } from './Motorcycle';
+import { Inventory, itemName, type ItemId } from './Inventory';
+import { Shop } from './Shop';
 import type { Layout, Point } from './layout';
 
 const KID_SPEED = 3;
@@ -19,9 +23,12 @@ type Interaction = { at: Point; hint: string; run: () => void };
 export class DayEvents {
   readonly herd: Herd;
   readonly motorcycle: Motorcycle;
+  readonly shop: Shop;
+  readonly inventory = new Inventory();
 
   private grandma: Phaser.GameObjects.Image;
   private grandpa: Phaser.GameObjects.Image;
+  private breadDelivered = false;
   private kids: { image: Phaser.GameObjects.Image; goal: Point }[] = [];
   private ball: Phaser.GameObjects.Image;
 
@@ -41,22 +48,62 @@ export class DayEvents {
     private px: number,
     private fade: (then: () => void, holdMs?: number) => void,
     private endDay: (title: string) => void,
+    izh: { position: () => Point; ride: () => void },
   ) {
     const { spots } = layout;
     this.grandma = this.person(spots.grandma, 'grandma');
     this.grandpa = this.person(spots.grandpa, 'grandpa');
+    this.person(spots.seller, 'seller');
     for (let i = 0; i < day.football.players; i++) {
       const start = this.randomOnField(i);
       this.kids.push({ image: this.person(start, 'kid').setTint(KID_TINTS[i % KID_TINTS.length]), goal: start });
     }
     this.ball = scene.add.image(0, 0, 'ball').setDepth(2);
     this.herd = new Herd(scene, layout.herdPath, layout.herdHomePath, spots.barnDoor, px);
-    this.motorcycle = new Motorcycle(dialogueBox, spots.motorcycle, spots.workbench);
+    this.motorcycle = new Motorcycle(dialogueBox, izh.position, spots.workbench, izh.ride, this.inventory);
+    this.shop = new Shop(dialogueBox, this.inventory, () => clock.minutes);
   }
 
   /** Grandma is in the yard when the day starts and tells what today is about. */
   start(): void {
-    this.dialogueBox.say(lines('grandmaMorning'));
+    this.skipMorning();
+    this.dialogueBox.choose(lines('grandmaMorning'), [this.askWhereGrandpaLives()]);
+  }
+
+  /**
+   * The player picked a slot in the open inventory. Some things can be eaten
+   * or drunk; that is all they do — no stats, nothing gained.
+   */
+  useSlot(index: number): void {
+    const slot = this.inventory.contents[index];
+    if (!slot) return;
+    const item: { name: string; use?: { verb: string; text: string } } = items.items[slot.id];
+    const name = itemName(slot.id);
+    const title = name.charAt(0).toUpperCase() + name.slice(1);
+    if (!item.use) {
+      this.dialogueBox.say([['', `${title}. Пусть пока полежит.`]]);
+      return;
+    }
+    const use = item.use;
+    this.dialogueBox.choose([['', title]], [
+      {
+        label: use.verb,
+        run: () => {
+          this.inventory.take(slot.id);
+          this.dialogueBox.say([['', use.text]]);
+        },
+      },
+    ]);
+  }
+
+  /** What the morning talk leaves the player with, for starts that skip it. */
+  skipMorning(): void {
+    this.inventory.rubles += shopConfig.grandmaGivesRubles;
+  }
+
+  /** The player can always ask grandma the way; she tells it like people do. */
+  private askWhereGrandpaLives(): Option {
+    return { label: 'спросить, где дом деда', run: () => this.dialogueBox.say(lines('grandmaWhereGrandpa')) };
   }
 
   update(player: Point, dt: number): void {
@@ -74,7 +121,8 @@ export class DayEvents {
       { at: this.at(this.grandma), hint: talk, reach, run: () => this.talkToGrandma() },
       { at: this.at(this.grandpa), hint: talk, reach, run: () => this.talkToGrandpa() },
       { at: spots.door, hint: 'E — в дом', reach, run: () => this.goInside() },
-      { at: spots.motorcycle, hint: 'E — ИЖ', reach: 2, run: () => this.motorcycle.inspect() },
+      { at: spots.counter, hint: 'E — магазин', reach, run: () => this.shop.visit() },
+      { at: this.motorcycle.position(), hint: 'E — ИЖ', reach: 2.5, run: () => this.motorcycle.inspect() },
       { at: spots.workbench, hint: 'E — верстак', reach: 2, run: () => this.motorcycle.inspectWorkbench() },
     ];
     if (this.kidsPresent()) {
@@ -99,16 +147,35 @@ export class DayEvents {
       this.dialogueBox.say(this.eveningLines(), () => (this.eveningTalkDone = true));
       return;
     }
-    this.dialogueBox.say(lines(this.visitedGrandpa ? 'grandmaDayAfterGrandpa' : 'grandmaDayBeforeGrandpa'));
+    const bread = this.handOverBread();
+    if (this.visitedGrandpa) {
+      this.dialogueBox.say([...bread, ...lines('grandmaDayAfterGrandpa')]);
+      return;
+    }
+    this.dialogueBox.choose([...bread, ...lines('grandmaDayBeforeGrandpa')], [this.askWhereGrandpaLives()]);
+  }
+
+  /** Bread in the pocket goes to grandma; without it she reminds once per talk. */
+  private handOverBread(): Line[] {
+    if (this.breadDelivered) return [];
+    const bread = shopConfig.errandItem as ItemId;
+    if (!this.inventory.has(bread)) return lines('grandmaBreadReminder');
+    this.inventory.take(bread);
+    this.breadDelivered = true;
+    return lines('grandmaBreadBrought');
   }
 
   private eveningLines(): Line[] {
     const cow = this.herd.cowMetBy;
+    const bread = this.handOverBread();
     return [
+      ...(this.breadDelivered ? bread : lines('grandmaEveningNoBread')),
       ...lines(this.visitedGrandpa ? 'grandmaEveningGrandpaVisited' : 'grandmaEveningGrandpaMissed'),
       ...(cow === 'player' ? lines('grandmaEveningCowByPlayer') : []),
       ...(cow === 'grandma' ? lines('grandmaEveningCowByGrandma') : []),
-      ...(this.motorcycle.started
+      ...(this.motorcycle.ridden
+        ? lines('grandmaEveningMotorcycleRidden')
+        : this.motorcycle.started
         ? lines('grandmaEveningMotorcycleStarted')
         : this.motorcycle.tried
           ? lines('grandmaEveningMotorcycleTried')
