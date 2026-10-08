@@ -1,0 +1,256 @@
+[
+ {
+  "file": "grandma-house/01-satellite.webp",
+  "camera": null,
+  "target": null,
+  "note": "спутниковый снимок, вид сверху",
+  "skip": true
+ },
+ {
+  "file": "grandma-house/02-street-birch-fence.webp",
+  "camera": [
+   56.68258450396937,
+   43.204934298992164
+  ],
+  "target": [
+   56.682645644844676,
+   43.204759955406196
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/03-facade-car.webp",
+  "camera": [
+   56.682633122022864,
+   43.20498660206796
+  ],
+  "target": [
+   56.68268763309913,
+   43.20482432842255
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/04-street-sand.webp",
+  "camera": [
+   56.682636805206194,
+   43.20489540696145
+  ],
+  "target": [
+   56.68259187034515,
+   43.20516094565392
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/05-porch-doors-beans.webp",
+  "camera": [
+   56.68267069047576,
+   43.20481225848199
+  ],
+  "target": [
+   56.682675110291285,
+   43.20473715662957
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/06-front-garden-clothesline.webp",
+  "camera": [
+   56.682648591390375,
+   43.20478543639184
+  ],
+  "target": [
+   56.68264343493524,
+   43.20490613579751
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/07-goal-between-sheds.webp",
+  "camera": [
+   56.682734041115395,
+   43.204389810562134
+  ],
+  "target": [
+   56.6828342233047,
+   43.204507827758796
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/08-veranda-porch.webp",
+  "camera": [
+   56.682669217203824,
+   43.20455074310303
+  ],
+  "target": [
+   56.68265448448107,
+   43.20468485355378
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/09-bench-under-birch.webp",
+  "camera": [
+   56.68262796556563,
+   43.20495307445527
+  ],
+  "target": [
+   56.682676583563016,
+   43.20482701063156
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/10-veranda-porch-close.webp",
+  "camera": [
+   56.68265227457216,
+   43.204565495252616
+  ],
+  "target": [
+   56.68264269829874,
+   43.204637914896026
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/11-front-garden-to-street.webp",
+  "camera": [
+   56.68265522111735,
+   43.20483639836312
+  ],
+  "target": [
+   56.682637541842816,
+   43.204923570156105
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/12-porch-family.webp",
+  "camera": [
+   56.682636805206194,
+   43.20485383272172
+  ],
+  "target": [
+   56.682676583563016,
+   43.20473715662957
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/13-back-yard-bike.webp",
+  "camera": [
+   56.68261028627829,
+   43.20457220077515
+  ],
+  "target": [
+   56.68257198112725,
+   43.204786777496345
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/15-street-path-fence.webp",
+  "camera": [
+   56.68257492767871,
+   43.204770684242256
+  ],
+  "target": [
+   56.68270752225596,
+   43.20491552352905
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/16-street-concrete-block.webp",
+  "camera": [
+   56.68257492767871,
+   43.20471704006195
+  ],
+  "target": [
+   56.68266627065972,
+   43.204877972602844
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "grandma-house/17-street-log-house.webp",
+  "camera": [
+   56.6825985000821,
+   43.20483505725861
+  ],
+  "target": [
+   56.68253367593726,
+   43.20509791374207
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "nashe-pole/01-meadow-ball.webp",
+  "camera": [
+   56.6826957360902,
+   43.204341530799866
+  ],
+  "target": [
+   56.68280181144908,
+   43.204277157783515
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "nashe-pole/02-banya-ball.webp",
+  "camera": [
+   56.682663324115396,
+   43.204303979873664
+  ],
+  "target": [
+   56.682748773806985,
+   43.20412695407868
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "club/01-facade-modern-dmitryponomarev.webp",
+  "camera": [
+   56.68494388045312,
+   43.207764029502876
+  ],
+  "target": [
+   56.685170749951915,
+   43.20803761482239
+  ],
+  "note": "",
+  "skip": false
+ },
+ {
+  "file": "club/02-memorial-stele.webp",
+  "camera": [
+   56.684708170435215,
+   43.20745825767518
+  ],
+  "target": [
+   56.68485843574211,
+   43.207753300666816
+  ],
+  "note": "",
+  "skip": false
+ }
+]
