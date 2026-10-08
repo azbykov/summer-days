@@ -1,0 +1,8 @@
+{
+  "pxPerMeter": 12,
+  "walkSpeedMetersPerSecond": 4.6,
+  "bikeSpeedMetersPerSecond": 13.5,
+  "bikeSecondsToFullSpeed": 1.5,
+  "bikeCoastSecondsToStop": 3,
+  "bikeReachMeters": 2.5
+}

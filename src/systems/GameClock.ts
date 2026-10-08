@@ -15,6 +15,16 @@ export class GameClock {
     this.elapsedMinutes += (deltaMs / 1000) * timeConfig.gameMinutesPerRealSecond;
   }
 
+  /** Time passes in a jump, e.g. while the player plays a football match. */
+  advance(minutes: number): void {
+    this.elapsedMinutes += minutes;
+  }
+
+  /** Minutes since midnight of the first day. */
+  get minutes(): number {
+    return this.elapsedMinutes;
+  }
+
   get hour(): number {
     return Math.floor(this.elapsedMinutes / 60) % 24;
   }
@@ -26,6 +36,17 @@ export class GameClock {
   format(): string {
     return `${pad(this.hour)}:${pad(this.minute)}`;
   }
+}
+
+/** "19:00" -> minutes since midnight. */
+export function clockTime(text: string): number {
+  const [hours, minutes] = text.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+/** Real seconds -> game minutes at the current time scale. */
+export function gameMinutes(realSeconds: number): number {
+  return realSeconds * timeConfig.gameMinutesPerRealSecond;
 }
 
 function pad(value: number): string {

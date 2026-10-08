@@ -1,0 +1,20 @@
+{
+  "herd": {
+    "arrival": "19:00",
+    "waitMinutes": 15,
+    "cows": 9,
+    "walkSpeedMetersPerSecond": 1.4,
+    "meetRadiusMeters": 20
+  },
+  "football": {
+    "from": "10:00",
+    "to": "17:00",
+    "players": 5,
+    "matchMinutes": 60,
+    "offerRadiusMeters": 12
+  },
+  "home": {
+    "doorOpensAt": "19:00"
+  },
+  "talkRadiusMeters": 3
+}
