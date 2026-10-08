@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Summer Days — карта</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font: 14px system-ui, sans-serif; background: #1d1f1b; color: #eee; }
+  #app { display: flex; height: 100%; }
+  #map { flex: 1; }
+  #side { width: 300px; flex: none; overflow-y: auto; padding: 12px; box-sizing: border-box; background: #262923; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #aab39a; margin: 16px 0 6px; }
+  h3 { font-size: 12px; color: #ccd; margin: 10px 0 4px; }
+  .tools button, .cats button { margin: 2px; padding: 5px 8px; border: 1px solid #555; background: #33372f; color: #eee; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  .tools button.on, .cats button.on { background: #6a8a3e; border-color: #9c6; }
+  .hint { color: #aab39a; font-size: 12px; margin: 6px 0; }
+  #status { font-size: 12px; color: #8a8; min-height: 16px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 5px 4px; border-bottom: 1px solid #333; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  li:hover { background: #30342c; }
+  li .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  li .name { flex: 1; }
+  li .del { color: #c88; border: none; background: none; cursor: pointer; }
+  .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .thumb { position: relative; cursor: pointer; border: 2px solid transparent; border-radius: 3px; overflow: hidden; aspect-ratio: 1; background: #111; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb.sel { border-color: #ffcc33; }
+  .thumb .mark { position: absolute; right: 2px; top: 2px; background: #6a8a3e; color: #fff; font-size: 10px; border-radius: 3px; padding: 0 3px; }
+  .thumb.skip { opacity: .45; }
+  .leaflet-popup-content input, .leaflet-popup-content textarea, .leaflet-popup-content select { width: 240px; display: block; margin: 4px 0; box-sizing: border-box; }
+  .leaflet-popup-content textarea { height: 60px; }
+  .leaflet-popup-content img { width: 260px; display: block; cursor: zoom-in; border-radius: 3px; }
+  #viewer { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: none; align-items: center; justify-content: center; z-index: 9999; cursor: zoom-out; }
+  #viewer img { max-width: 95vw; max-height: 95vh; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+  <div id="side">
+    <div id="status"></div>
+    <h2>Режим</h2>
+    <div class="tools" id="tools"></div>
+    <div class="hint" id="hint"></div>
+    <div id="modePanel"></div>
+  </div>
+</div>
+<div id="viewer"><img></div>
+<script>
+const POINT_CATS = {
+  'дом бабушки': '#ffcc33', 'хлев / сарай': '#c98c4a', 'велосипед': '#66ccff',
+  'встреча стада': '#ff9966', 'клуб': '#cc66ff', 'магазин': '#ff66aa', 'остановка': '#aaaaaa',
+  'футбол': '#66ff66', 'купание': '#33aaff', 'мост': '#888888', 'пастбище': '#99cc66',
+  'дом деда': '#ff6633', 'гараж': '#ff3333', 'бензин': '#ffff00', 'памятник': '#bbbbbb', 'вход': '#ffffff', 'другое': '#dddddd'
+};
+const LINE_CATS = {
+  'дорога': '#e0c080', 'тропинка': '#c0a070', 'речка / ручей': '#33aaff',
+  'путь стада': '#ff9966', 'забор': '#a08060', 'граница карты': '#ff3333'
+};
+const AREA_CATS = {
+  'поле': '#cccc44', 'лес': '#227722', 'огороды': '#88aa44', 'вода': '#2266cc', 'деревня': '#cc8844', 'участок': '#ffcc33'
+};
+const CATS = { point: POINT_CATS, line: LINE_CATS, area: AREA_CATS };
+const MODES = { photo: 'Фото', point: 'Точка', line: 'Линия', area: 'Область', view: 'Просмотр' };
+const HINTS = {
+  photo: 'Выберите фото справа. Клик по карте — где стоял фотограф. Второй клик — куда смотрел объектив.',
+  point: 'Клик по карте — поставить точку. Точку можно перетащить.',
+  line: 'Кликайте вершины. Двойной клик или Enter — закончить, Esc — отменить.',
+  area: 'Кликайте вершины контура. Двойной клик или Enter — закончить.',
+  view: 'Клик по объекту — редактировать.'
+};
+const PHOTO_FOV = 50;
+
+let items = [], photos = [], bindings = [];
+let mode = 'photo', cat = 'дом бабушки', draft = null, draftLayer = null;
+let selPhoto = null, photoStep = null, photoDraftLayer = null;
+const layers = new Map(), photoLayers = new Map();
+
+const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 18, attribution: 'Esri' });
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
+const labels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 18 });
+const placesGroup = L.layerGroup(), photosGroup = L.layerGroup();
+const map = L.map('map', { doubleClickZoom: false, layers: [sat, labels, placesGroup, photosGroup] }).setView([56.68275, 43.20473], 18);
+L.control.layers({ 'Спутник': sat, 'Схема (OSM)': osm }, { 'Подписи': labels, 'Места': placesGroup, 'Фото': photosGroup }).addTo(map);
+L.control.scale({ imperial: false }).addTo(map);
+
+// ---------- persistence ----------
+const saveTimers = {};
+function status(t, error) {
+  const el = document.getElementById('status');
+  el.textContent = t;
+  el.style.cssText = error ? 'background:#a33;color:#fff;padding:8px;font-size:13px;border-radius:4px' : '';
+}
+// Unsaved changes survive a dead server or a page reload until the next successful save.
+function backupKey(url) { return 'summer-days-unsaved:' + url; }
+function backup(url, data) { try { localStorage.setItem(backupKey(url), JSON.stringify(data)); } catch (e) {} }
+function clearBackup(url) { try { localStorage.removeItem(backupKey(url)); } catch (e) {} }
+function readBackup(url) { try { return JSON.parse(localStorage.getItem(backupKey(url))); } catch (e) { return null; } }
+const versions = {};
+async function load(url) {
+  const r = await fetch(url);
+  if (r.headers.has('X-Version')) versions[url] = r.headers.get('X-Version');
+  return r.json();
+}
+function persist(url, data) {
+  clearTimeout(saveTimers[url]);
+  backup(url, data);
+  status('Сохраняю…');
+  saveTimers[url] = setTimeout(async () => {
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Base-Version': versions[url] || '' }, body: JSON.stringify(data) });
+      if (r.status === 409) {
+        status('НЕ СОХРАНЕНО: данные изменились в другой вкладке или вне редактора. Перезагрузите страницу — свежие данные загрузятся, а ваши последние изменения редактор предложит восстановить.', true);
+        return;
+      }
+      if (!r.ok) throw new Error(r.status);
+      versions[url] = r.headers.get('X-Version');
+      clearBackup(url);
+      status('Сохранено ' + new Date().toLocaleTimeString());
+    } catch (e) {
+      status('НЕ СОХРАНЕНО: сервер недоступен. Изменения держатся в браузере. Запустите python3 tools/map-editor/server.py и перезагрузите страницу.', true);
+    }
+  }, 400);
+}
+function savePlaces() { persist('/api/places', items); renderPanel(); }
+function saveBindings() { persist('/api/photo-bindings', bindings); renderPanel(); }
+
+// ---------- helpers ----------
+function color(it) { return CATS[it.type][it.cat] || '#fff'; }
+function uid() { return Math.random().toString(36).slice(2, 9); }
+function esc(s) { return String(s || '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]); }
+function photoUrl(f) { return '/docs/map/photos/' + f.split('/').map(encodeURIComponent).join('/'); }
+function binding(f) { return bindings.find(b => b.file === f); }
+function openViewer(src) { const v = document.getElementById('viewer'); v.querySelector('img').src = src; v.style.display = 'flex'; }
+document.getElementById('viewer').onclick = e => e.currentTarget.style.display = 'none';
+
+function offset(ll, bearingDeg, meters) {
+  const b = bearingDeg * Math.PI / 180;
+  const dLat = meters * Math.cos(b) / 111200;
+  const dLng = meters * Math.sin(b) / (111300 * Math.cos(ll[0] * Math.PI / 180));
+  return [ll[0] + dLat, ll[1] + dLng];
+}
+function bearingDist(a, b) {
+  const dy = (b[0] - a[0]) * 111200, dx = (b[1] - a[1]) * 111300 * Math.cos(a[0] * Math.PI / 180);
+  return [((Math.atan2(dx, dy) * 180 / Math.PI) + 360) % 360, Math.hypot(dx, dy)];
+}
+function cone(camera, target) {
+  const [brg, dist] = bearingDist(camera, target);
+  const pts = [camera];
+  for (let a = -PHOTO_FOV / 2; a <= PHOTO_FOV / 2; a += 5) pts.push(offset(camera, brg + a, dist));
+  return pts;
+}
+
+// ---------- places ----------
+function drawPlace(it) {
+  if (layers.has(it.id)) placesGroup.removeLayer(layers.get(it.id));
+  let l;
+  const c = color(it);
+  if (it.type === 'point') {
+    l = L.circleMarker(it.coords[0], { radius: 7, color: '#000', weight: 1.5, fillColor: c, fillOpacity: 1 });
+    l.bindTooltip(it.name || it.cat, { permanent: true, direction: 'right', offset: [8, 0] });
+    makeDraggable(l, it);
+  } else if (it.type === 'line') {
+    l = L.polyline(it.coords, { color: c, weight: 5, opacity: .9, dashArray: it.cat === 'тропинка' ? '6 6' : null });
+    l.bindTooltip(it.name || it.cat, { sticky: true });
+  } else {
+    l = L.polygon(it.coords, { color: c, weight: 2, fillOpacity: .2 });
+    l.bindTooltip(it.name || it.cat, { sticky: true });
+  }
+  l.on('click', e => { if (mode === 'photo' && photoStep) return; L.DomEvent.stopPropagation(e); if (!draft) openPlaceEditor(it, e.latlng); });
+  placesGroup.addLayer(l);
+  layers.set(it.id, l);
+}
+
+function makeDraggable(marker, it) {
+  marker.on('mousedown', e => {
+    if (draft || photoStep) return;
+    map.dragging.disable();
+    let moved = false;
+    const move = ev => { moved = true; marker.setLatLng(ev.latlng); };
+    map.on('mousemove', move);
+    map.once('mouseup', ev => {
+      map.off('mousemove', move); map.dragging.enable();
+      if (moved) { it.coords = [[ev.latlng.lat, ev.latlng.lng]]; savePlaces(); marker._skipClick = true; setTimeout(() => marker._skipClick = false, 50); }
+    });
+  });
+  marker.on('click', e => { if (marker._skipClick) L.DomEvent.stopPropagation(e); });
+}
+
+function openPlaceEditor(it, at) {
+  const div = document.createElement('div');
+  const cats = Object.keys(CATS[it.type]);
+  div.innerHTML = `
+    <select>${cats.map(c => `<option ${c === it.cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+    <input placeholder="Название" value="${esc(it.name)}">
+    <textarea placeholder="Заметка: как выглядит, что помнишь">${esc(it.note)}</textarea>
+    <button data-a="ok">Сохранить</button> <button data-a="del">Удалить</button>`;
+  const popup = L.popup({ minWidth: 250 }).setLatLng(at).setContent(div).openOn(map);
+  div.querySelector('input').focus();
+  div.addEventListener('click', e => {
+    const a = e.target.dataset.a;
+    if (a === 'ok') {
+      it.cat = div.querySelector('select').value;
+      it.name = div.querySelector('input').value.trim();
+      it.note = div.querySelector('textarea').value.trim();
+      drawPlace(it); savePlaces(); map.closePopup(popup);
+    } else if (a === 'del') {
+      if (!confirm('Удалить «' + (it.name || it.cat) + '»?')) return;
+      items = items.filter(x => x !== it);
+      placesGroup.removeLayer(layers.get(it.id)); layers.delete(it.id);
+      savePlaces(); map.closePopup(popup);
+    }
+  });
+  div.querySelector('input').addEventListener('keydown', e => { if (e.key === 'Enter') div.querySelector('[data-a=ok]').click(); });
+}
+
+function finishDraft() {
+  if (!draft) return;
+  const min = draft.type === 'area' ? 3 : 2;
+  if (draftLayer) map.removeLayer(draftLayer);
+  const it = draft; draft = null; draftLayer = null;
+  if (it.coords.length >= min) { items.push(it); drawPlace(it); savePlaces(); openPlaceEditor(it, it.coords[it.coords.length - 1]); }
+}
+function cancelDraft() { if (draftLayer) map.removeLayer(draftLayer); draft = null; draftLayer = null; }
+
+// ---------- photos ----------
+function drawPhoto(b) {
+  if (photoLayers.has(b.file)) photosGroup.removeLayer(photoLayers.get(b.file));
+  if (!b.camera) return;
+  const sel = b.file === selPhoto;
+  const g = L.layerGroup();
+  if (b.target) {
+    L.polygon(cone(b.camera, b.target), { color: sel ? '#ffcc33' : '#ffffff', weight: sel ? 2 : 1, fillColor: sel ? '#ffcc33' : '#ffffff', fillOpacity: sel ? .3 : .12, interactive: false }).addTo(g);
+  }
+  const m = L.circleMarker(b.camera, { radius: sel ? 7 : 5, color: '#000', weight: 1.5, fillColor: sel ? '#ffcc33' : '#ffffff', fillOpacity: 1 });
+  m.bindTooltip(`<img src="${photoUrl(b.file)}" style="width:160px;display:block">`, { direction: 'top', offset: [0, -6] });
+  m.on('click', e => { L.DomEvent.stopPropagation(e); if (photoStep) return; selectPhoto(b.file, false); openPhotoPopup(b); });
+  m.addTo(g);
+  photosGroup.addLayer(g);
+  photoLayers.set(b.file, g);
+}
+
+function openPhotoPopup(b) {
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <img src="${photoUrl(b.file)}">
+    <div style="font-size:11px;color:#666;margin:4px 0">${esc(b.file)}</div>
+    <textarea placeholder="Что на фото, откуда снято">${esc(b.note)}</textarea>
+    <button data-a="ok">Сохранить</button>
+    <button data-a="rebind">Перепривязать</button>
+    <button data-a="unbind">Отвязать</button>`;
+  const popup = L.popup({ minWidth: 270, maxWidth: 300 }).setLatLng(b.camera).setContent(div).openOn(map);
+  div.querySelector('img').onclick = () => openViewer(photoUrl(b.file));
+  div.addEventListener('click', e => {
+    const a = e.target.dataset.a;
+    if (a === 'ok') { b.note = div.querySelector('textarea').value.trim(); saveBindings(); map.closePopup(popup); }
+    if (a === 'rebind') { map.closePopup(popup); setMode('photo'); selectPhoto(b.file, true); }
+    if (a === 'unbind') { b.camera = null; b.target = null; drawPhoto(b); saveBindings(); map.closePopup(popup); }
+  });
+}
+
+function ensureBinding(f) {
+  let b = binding(f);
+  if (!b) { b = { file: f, camera: null, target: null, note: '', skip: false }; bindings.push(b); }
+  return b;
+}
+
+function selectPhoto(f, startPlacing) {
+  const prev = selPhoto;
+  selPhoto = f;
+  clearPhotoDraft();
+  photoStep = startPlacing ? 'camera' : null;
+  if (prev) { const pb = binding(prev); if (pb) drawPhoto(pb); }
+  const b = binding(f);
+  if (b) drawPhoto(b);
+  if (b && b.camera && !startPlacing) map.panTo(b.camera);
+  renderPanel();
+}
+
+function clearPhotoDraft() { if (photoDraftLayer) map.removeLayer(photoDraftLayer); photoDraftLayer = null; }
+
+function photoMapClick(ll) {
+  if (!selPhoto || !photoStep) return;
+  const b = ensureBinding(selPhoto);
+  if (photoStep === 'camera') {
+    b.camera = ll; b.target = null; photoStep = 'target';
+    clearPhotoDraft();
+    photoDraftLayer = L.circleMarker(ll, { radius: 7, color: '#000', fillColor: '#ffcc33', fillOpacity: 1 }).addTo(map);
+    const move = e => {
+      if (photoStep !== 'target') { map.off('mousemove', move); return; }
+      clearPhotoDraft();
+      photoDraftLayer = L.polygon(cone(b.camera, [e.latlng.lat, e.latlng.lng]), { color: '#ffcc33', weight: 1, fillOpacity: .25, interactive: false }).addTo(map);
+    };
+    map.on('mousemove', move);
+    renderPanel();
+  } else {
+    b.target = ll; photoStep = null;
+    clearPhotoDraft(); drawPhoto(b); saveBindings();
+    nextUnplaced();
+  }
+}
+
+function nextUnplaced() {
+  const i = photos.indexOf(selPhoto);
+  const order = photos.slice(i + 1).concat(photos.slice(0, i));
+  const next = order.find(f => { const b = binding(f); return !(b && (b.camera || b.skip)); });
+  if (next) selectPhoto(next, true); else { selPhoto = null; renderPanel(); }
+}
+
+// ---------- map events ----------
+map.on('click', e => {
+  const p = [e.latlng.lat, e.latlng.lng];
+  if (mode === 'photo') return photoMapClick(p);
+  if (mode === 'point') {
+    const it = { id: uid(), type: 'point', cat, name: '', note: '', coords: [p] };
+    items.push(it); drawPlace(it); savePlaces(); openPlaceEditor(it, e.latlng);
+  } else if (mode === 'line' || mode === 'area') {
+    if (!draft) draft = { id: uid(), type: mode, cat, name: '', note: '', coords: [] };
+    draft.coords.push(p);
+    if (draftLayer) map.removeLayer(draftLayer);
+    draftLayer = L.polyline(draft.coords, { color: color(draft), weight: 4, dashArray: '4 4' }).addTo(map);
+  }
+});
+map.on('dblclick', () => finishDraft());
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Enter') finishDraft();
+  if (e.key === 'Escape') { cancelDraft(); if (photoStep) { photoStep = null; clearPhotoDraft(); const b = binding(selPhoto); if (b) drawPhoto(b); renderPanel(); } }
+});
+
+// ---------- sidebar ----------
+function setMode(m) {
+  cancelDraft();
+  if (m !== 'photo') { photoStep = null; clearPhotoDraft(); }
+  mode = m;
+  const cs = CATS[m];
+  if (cs && !(cat in cs)) cat = Object.keys(cs)[0];
+  renderPanel();
+}
+
+function renderPanel() {
+  const t = document.getElementById('tools'); t.innerHTML = '';
+  for (const [m, label] of Object.entries(MODES)) {
+    const b = document.createElement('button'); b.textContent = label; b.className = m === mode ? 'on' : '';
+    b.onclick = () => setMode(m);
+    t.appendChild(b);
+  }
+  document.getElementById('hint').textContent = HINTS[mode];
+  const panel = document.getElementById('modePanel'); panel.innerHTML = '';
+  if (mode === 'photo') renderPhotoPanel(panel); else renderPlacesPanel(panel);
+}
+
+function renderPhotoPanel(panel) {
+  const placed = photos.filter(f => { const b = binding(f); return b && b.camera; }).length;
+  const head = document.createElement('div');
+  head.className = 'hint';
+  head.innerHTML = `Привязано ${placed} из ${photos.length}.`;
+  if (selPhoto) {
+    const step = photoStep === 'camera' ? '<b>Кликните, где стоял фотограф.</b>'
+      : photoStep === 'target' ? '<b>Кликните, куда смотрел объектив.</b>' : '';
+    head.innerHTML += `<div style="margin:8px 0"><img src="${photoUrl(selPhoto)}" style="width:100%;border-radius:3px;cursor:zoom-in" id="selImg"></div>${step}
+      <div class="tools"><button id="place">${binding(selPhoto) && binding(selPhoto).camera ? 'Перепривязать' : 'Привязать'}</button>
+      <button id="skip">${binding(selPhoto) && binding(selPhoto).skip ? 'Вернуть' : 'Не привязывать'}</button>
+      <button id="next">Следующее →</button></div>`;
+  }
+  panel.appendChild(head);
+  if (selPhoto) {
+    panel.querySelector('#selImg').onclick = () => openViewer(photoUrl(selPhoto));
+    panel.querySelector('#place').onclick = () => selectPhoto(selPhoto, true);
+    panel.querySelector('#skip').onclick = () => { const b = ensureBinding(selPhoto); b.skip = !b.skip; saveBindings(); if (b.skip) nextUnplaced(); };
+    panel.querySelector('#next').onclick = () => nextUnplaced();
+  }
+  const groups = {};
+  for (const f of photos) (groups[f.split('/')[0]] ||= []).push(f);
+  for (const [g, files] of Object.entries(groups)) {
+    const h = document.createElement('h3'); h.textContent = g; panel.appendChild(h);
+    const grid = document.createElement('div'); grid.className = 'thumbs';
+    for (const f of files) {
+      const b = binding(f);
+      const d = document.createElement('div');
+      d.className = 'thumb' + (f === selPhoto ? ' sel' : '') + (b && b.skip ? ' skip' : '');
+      d.title = f;
+      d.innerHTML = `<img loading="lazy" src="${photoUrl(f)}">${b && b.camera ? '<span class="mark">✓</span>' : ''}`;
+      d.onclick = () => selectPhoto(f, !(b && b.camera));
+      grid.appendChild(d);
+    }
+    panel.appendChild(grid);
+  }
+}
+
+function renderPlacesPanel(panel) {
+  const cs = CATS[mode];
+  if (cs) {
+    const h = document.createElement('h2'); h.textContent = 'Тип'; panel.appendChild(h);
+    const c = document.createElement('div'); c.className = 'cats';
+    for (const [name, col] of Object.entries(cs)) {
+      const b = document.createElement('button'); b.className = name === cat ? 'on' : '';
+      b.innerHTML = `<span style="color:${col}">●</span> ${esc(name)}`;
+      b.onclick = () => { cat = name; if (draft) draft.cat = name; renderPanel(); };
+      c.appendChild(b);
+    }
+    panel.appendChild(c);
+  }
+  const h = document.createElement('h2'); h.textContent = 'Отмечено'; panel.appendChild(h);
+  const ul = document.createElement('ul');
+  for (const it of items) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="dot" style="background:${color(it)}"></span><span class="name">${esc(it.name || it.cat)} <small style="color:#888">${esc(it.name ? it.cat : '')}</small></span>`;
+    li.onclick = () => {
+      const l = layers.get(it.id);
+      if (it.type === 'point') map.setView(it.coords[0], Math.max(map.getZoom(), 18)); else map.fitBounds(l.getBounds(), { maxZoom: 18 });
+      openPlaceEditor(it, it.coords[0]);
+    };
+    ul.appendChild(li);
+  }
+  panel.appendChild(ul);
+}
+
+// ---------- boot ----------
+(async () => {
+  const blocked = msg => {
+    status(msg, true);
+    document.getElementById('map').style.pointerEvents = 'none';
+    document.getElementById('map').style.opacity = '.4';
+  };
+  if (location.protocol === 'file:') return blocked('Редактор открыт как файл — так он ничего не сохранит. Запустите python3 tools/map-editor/server.py и откройте http://127.0.0.1:8765/');
+  status('Загружаю…');
+  try {
+    [items, photos, bindings] = await Promise.all(['/api/places', '/api/photos', '/api/photo-bindings'].map(load));
+  } catch (e) { return blocked('Сервер недоступен — так ничего не сохранится. Запустите python3 tools/map-editor/server.py и перезагрузите страницу.'); }
+  const unsavedPlaces = readBackup('/api/places'), unsavedBindings = readBackup('/api/photo-bindings');
+  if ((unsavedPlaces || unsavedBindings) && confirm('Есть несохранённые изменения с прошлого раза. Восстановить их? Они целиком заменят данные из файлов, включая правки, сделанные после них в другом месте. «Отмена» — оставить данные из файлов.')) {
+    if (unsavedPlaces) { items = unsavedPlaces; persist('/api/places', items); }
+    if (unsavedBindings) { bindings = unsavedBindings; persist('/api/photo-bindings', bindings); }
+  } else { clearBackup('/api/places'); clearBackup('/api/photo-bindings'); }
+  bindings = bindings.filter(b => photos.includes(b.file));
+  items.forEach(drawPlace);
+  bindings.forEach(drawPhoto);
+  status('');
+  window.addEventListener('focus', async () => {
+    const fresh = await fetch('/api/photos').then(r => r.json()).catch(() => null);
+    if (fresh && fresh.join() !== photos.join()) { photos = fresh; renderPanel(); }
+  });
+  const first = photos.find(f => { const b = binding(f); return !(b && (b.camera || b.skip)); });
+  if (first) selectPhoto(first, true); else renderPanel();
+})();
+</script>
+</body>
+</html>
