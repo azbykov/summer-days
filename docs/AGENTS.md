@@ -1,5 +1,8 @@
 # Instructions for AI Coding Agents
 
+First read `STATUS.md`: where the prototype stands, what the author has
+decided beyond this file, and how to commit and test here.
+
 ## Project goal
 
 Build the smallest playable prototype that can validate the game concept described in:

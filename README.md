@@ -6,6 +6,8 @@ Working title only. See `docs/VISION.md`.
 
 ## Design documents
 
+Start with `docs/STATUS.md` — current state, decisions and how to work here.
+
 Read before changing gameplay:
 
 1. `docs/VISION.md`
