@@ -1,0 +1,90 @@
+{
+  "walkSpeedMetersPerSecond": 1.8,
+  "unseenSpeedMultiplier": 6,
+  "unseenDistanceMeters": 60,
+  "stayGameMinutes": [
+    15,
+    45
+  ],
+  "callRadiusMeters": 10,
+  "friends": [
+    {
+      "name": "Димка",
+      "color": "#3a5a9a",
+      "start": "grandmaBench",
+      "hangouts": [
+        "grandmaBench",
+        "pump",
+        "club",
+        "kiosk",
+        "ourField"
+      ],
+      "invites": [
+        "football",
+        "swim"
+      ]
+    },
+    {
+      "name": "Серый",
+      "color": "#4a7a3a",
+      "start": "club",
+      "hangouts": [
+        "club",
+        "kiosk",
+        "schoolField",
+        "pump"
+      ],
+      "invites": [
+        "football"
+      ]
+    },
+    {
+      "name": "Лёха",
+      "color": "#c8a03a",
+      "start": "ourField",
+      "hangouts": [
+        "ourField",
+        "pump",
+        "club",
+        "grandmaBench"
+      ],
+      "invites": [
+        "swim"
+      ]
+    }
+  ],
+  "invites": {
+    "football": {
+      "from": "10:00",
+      "to": "16:00",
+      "place": "schoolField",
+      "ask": "Пошли в футбол? Пацаны на школьном собрались.",
+      "yes": "Давай, догоняй!",
+      "no": "Ну как хочешь."
+    },
+    "swim": {
+      "from": "12:00",
+      "to": "18:00",
+      "place": "beach",
+      "ask": "Айда купаться? На берег, за Шестово.",
+      "yes": "Встречаемся на берегу!",
+      "no": "Ладно, потом."
+    }
+  },
+  "smallTalk": [
+    "Здоров.",
+    "Жарища сегодня…",
+    "Видал, у деда твоего ИЖ в гараже стоит?",
+    "В субботу в клубе дискотека, придёшь?",
+    "У колонки вода — зубы ломит.",
+    "Мамка опять огород полоть гонит."
+  ],
+  "atBeach": "Ну что, лезем?",
+  "swim": {
+    "minutes": 45,
+    "alone": "Вода холодная — аж дух перехватило. Наплавался до синих губ.",
+    "together": "Наплавались до синих губ, ныряли с берега на спор.",
+    "after": "Завтра ещё придём!",
+    "decline": "Ну, я тогда один."
+  }
+}

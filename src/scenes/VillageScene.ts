@@ -1,13 +1,17 @@
 import Phaser from 'phaser';
+import needsConfig from '../content/needs.json';
 import worldConfig from '../content/world.json';
 import { GameClock } from '../systems/GameClock';
+import type { Pace } from '../systems/Needs';
 import { DialogueBox } from '../ui/DialogueBox';
 import { InventoryPanel } from '../ui/InventoryPanel';
+import { NeedsBars } from '../ui/NeedsBars';
 import { DayEvents } from '../world/DayEvents';
 import { buildLayout, type Block, type BlockKind, type Layout, type Road } from '../world/layout';
 
 const PX = worldConfig.pxPerMeter;
 const WALK_SPEED = worldConfig.walkSpeedMetersPerSecond * PX;
+const RUN_SPEED = WALK_SPEED * needsConfig.runSpeedMultiplier;
 const BIKE_REACH = worldConfig.bikeReachMeters * PX;
 
 const COLOR_GRASS = 0x4f6b3a;
@@ -35,6 +39,7 @@ const BLOCK_COLORS: Record<BlockKind, number> = {
   memorial: 0x9a9a92,
   busStop: 0x6f9aa8,
   kiosk: 0x5d7380,
+  pump: 0x3a5a3a,
   shop: 0x8a6a50,
   grandpaHouse: 0x7a5a40,
   garage: 0x6a6a64,
@@ -76,6 +81,9 @@ export class VillageScene extends Phaser.Scene {
   private numberKeys!: Phaser.Input.Keyboard.Key[];
   private dialogue!: DialogueBox;
   private inventoryPanel!: InventoryPanel;
+  private needsBars!: NeedsBars;
+  /** How the player moved last frame, for stamina. */
+  private pace: Pace = 'still';
   private day!: DayEvents;
   private overlay!: Phaser.GameObjects.Rectangle;
   private dayOver = false;
@@ -139,7 +147,7 @@ export class VillageScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
 
     this.cursors = this.input.keyboard!.createCursorKeys();
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D') as Record<
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,SHIFT') as Record<
       string,
       Phaser.Input.Keyboard.Key
     >;
@@ -173,6 +181,7 @@ export class VillageScene extends Phaser.Scene {
       },
     );
     this.inventoryPanel = new InventoryPanel(this, this.day.inventory);
+    this.needsBars = new NeedsBars(this, this.day.needs, 84, 10);
     if (this.devStart(layout)) this.day.skipMorning();
     else this.day.start();
   }
@@ -197,6 +206,10 @@ export class VillageScene extends Phaser.Scene {
     if (this.dayOver) return;
     this.clock.update(delta);
     this.clockText.setText(this.clock.format());
+    // Needs follow the clock, including jumps like a football match.
+    this.day.needs.update(this.clock.minutes, delta / 1000, this.pace);
+    this.needsBars.refresh();
+    this.pace = 'still';
     const here = { x: this.player.x / PX, y: this.player.y / PX };
     // The world keeps going during conversations: the herd does not wait.
     this.day.update(here, delta / 1000);
@@ -235,6 +248,8 @@ export class VillageScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.useKey)) this.dismount();
       this.hint.setVisible(false);
       this.ride(vehicle, direction, delta);
+      // Pedalling or sitting on the IZH rests the legs a little.
+      this.pace = 'ride';
       return;
     }
 
@@ -255,10 +270,15 @@ export class VillageScene extends Phaser.Scene {
       this.hint.setText('E — сесть').setPosition(bike.x, bike.y - 14).setVisible(this.nearBike());
     }
 
-    direction.normalize().scale(WALK_SPEED);
+    // Shift runs while there is stamina left, Diablo 2 style.
+    const moving = direction.lengthSq() > 0;
+    const running = moving && this.keys.SHIFT.isDown && this.day.needs.canRun;
+    this.pace = running ? 'run' : moving ? 'walk' : 'still';
+    direction.normalize().scale(running ? RUN_SPEED : WALK_SPEED);
     this.player.setVelocity(direction.x, direction.y);
   }
 
+  /** Vehicles gather speed and coast instead of stopping dead. */
   /** Vehicles gather speed and coast instead of stopping dead. */
   private ride(vehicle: Vehicle, direction: Phaser.Math.Vector2, delta: number): void {
     const pushing = direction.lengthSq() > 0;
@@ -365,11 +385,19 @@ export class VillageScene extends Phaser.Scene {
     graphics.fillRect(3, 11, 10, 9);
     graphics.generateTexture('izhRider', 16, 26);
 
-    for (const [key, color] of [['grandma', COLOR_GRANDMA], ['grandpa', COLOR_GRANDPA], ['seller', COLOR_SELLER], ['kid', 0xffffff]] as const) {
+    // People as plain figures; kids and friends are shorter and tinted per person.
+    const people = [
+      ['grandma', COLOR_GRANDMA, 22],
+      ['grandpa', COLOR_GRANDPA, 22],
+      ['seller', COLOR_SELLER, 22],
+      ['friend', 0xffffff, 20],
+      ['kid', 0xffffff, 18],
+    ] as const;
+    for (const [key, color, height] of people) {
       graphics.clear();
       graphics.fillStyle(color, 1);
-      graphics.fillRect(0, 0, 14, key === 'kid' ? 18 : 22);
-      graphics.generateTexture(key, 14, key === 'kid' ? 18 : 22);
+      graphics.fillRect(0, 0, 14, height);
+      graphics.generateTexture(key, 14, height);
     }
 
     // Top-down cow pointing up: ~1 x 2.2 m, head first.

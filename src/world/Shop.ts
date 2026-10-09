@@ -24,13 +24,14 @@ export class Shop {
     private now: () => number,
   ) {}
 
-  visit(): void {
+  /** `remark`: anything the seller says first, e.g. about the player's looks. */
+  visit(remark: Line[] = []): void {
     const now = this.now() % (24 * 60);
     if (now < this.opens || now >= this.closes) {
       this.dialogueBox.say(lines('shopClosed'));
       return;
     }
-    this.counter(lines('shopWelcome'));
+    this.counter([...remark, ...lines('shopWelcome')]);
   }
 
   private counter(before: Line[]): void {

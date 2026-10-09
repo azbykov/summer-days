@@ -38,6 +38,7 @@ export type BlockKind =
   | 'memorial'
   | 'busStop'
   | 'kiosk'
+  | 'pump'
   | 'shop'
   | 'grandpaHouse'
   | 'garage'
@@ -68,9 +69,13 @@ export type Layout = {
     barnDoor: Point;
     herdMeeting: Point;
     football: Block;
-    /** The kiosk-container by the bus stop: where the seller sits and where the player stands. */
+    /** The kiosk-container by the bus stop: the seller sits in the middle. */
     seller: Point;
-    counter: Point;
+    /** From the middle of the kiosk, how far the player can stand and still be served. */
+    counterReach: number;
+    /** Drinking-water pump by Vysokaya street, halfway from grandma's to the kiosk. */
+    pump: Point;
+    beach: Point;
     /** Where the IZH stands at the start of the day. */
     motorcycle: Point;
     workbench: Point;
@@ -81,7 +86,11 @@ export type Layout = {
   herdPath: Point[];
   /** Cows go home down Vysokaya street. */
   herdHomePath: Point[];
+  /** Places villagers drift between when they have nothing better to do. */
+  hangouts: Record<Hangout, Point>;
 };
+
+export type Hangout = 'pump' | 'club' | 'schoolField' | 'ourField' | 'grandmaBench' | 'kiosk' | 'beach';
 
 /** Marked places that lie outside the MVP scene (docs/MAP.md, «Структура сцены»). */
 const OUTSIDE_SCENE = new Set(['9dzft3o', 'doaycwk', 'jmvr7k5', 'vqd2yr0']);
@@ -118,6 +127,7 @@ export function buildLayout(): Layout {
   // The reservoir: everything beyond the swimming spot.
   const shoreY = swim.y - 10;
 
+  const ourFieldAnchor = at('qh8gjbr');
   const roads: Road[] = [
     // Vysokaya street: from beyond grandma's house up to the bus stop.
     { kind: 'sand', width: STREET_WIDTH, points: [extend(center, mainRoute[0], 150), center] },
@@ -125,6 +135,12 @@ export function buildLayout(): Layout {
     { kind: 'asphalt', width: 7, points: [center, turn, extend(center, turn, 200)] },
     { kind: 'sand', width: STREET_WIDTH, points: mainRoute.slice(2) },
     { kind: 'sand', width: STREET_WIDTH, points: kindergartenRoute.slice(1) },
+    // Trodden path from the street round the back of grandma's house to «наше поле».
+    {
+      kind: 'path',
+      width: PATH_WIDTH,
+      points: [{ x: mainRoute[0].x, y: 18 }, { x: -18, y: 18 }, { x: ourFieldAnchor.x - 4, y: ourFieldAnchor.y + 4 }],
+    },
     {
       kind: 'path',
       width: PATH_WIDTH,
@@ -159,6 +175,8 @@ export function buildLayout(): Layout {
     { kind: 'workbench', x: workbench.x, y: workbench.y, w: 3, h: 0.8, solid: true },
   ];
   const kioskBox = { x: kiosk.x + 4, y: kiosk.y + 2, w: 6, h: 2.5 };
+  // Halfway between grandma's house and the kiosk, at the edge of Vysokaya street.
+  const pump = { x: mainRoute[0].x + STREET_WIDTH / 2 + 1.5, y: kiosk.y / 2 };
   const grandmaHouse: Block = { kind: 'grandmaHouse', x: 0, y: 0, w: 10, h: 8, solid: true, label: 'дом бабушки' };
   const clubBlock: Block = { kind: 'club', x: club.x + 6, y: club.y - 4, w: 30, h: 20, solid: true, label: 'клуб' };
 
@@ -171,6 +189,7 @@ export function buildLayout(): Layout {
     { kind: 'square', ...boxAround([stop, kiosk, herdMeeting, memorial, club], 15), solid: false },
     { kind: 'busStop', x: stop.x, y: stop.y + 2, w: 6, h: 2.5, solid: true, label: 'остановка' },
     { kind: 'kiosk', ...kioskBox, solid: true, label: 'контейнер' },
+    { kind: 'pump', ...pump, w: 0.8, h: 0.8, solid: true, label: 'колонка' },
     { kind: 'shop', ...offset(at('m5fb8fg'), 6, 0), w: 10, h: 8, solid: true, label: 'хозмаг' },
     clubBlock,
     { kind: 'memorial', x: memorial.x, y: memorial.y, w: 3, h: 3, solid: true, label: 'стела' },
@@ -211,12 +230,25 @@ export function buildLayout(): Layout {
       herdMeeting,
       football: schoolFieldBlock,
       seller: { x: kioskBox.x, y: kioskBox.y },
-      counter: { x: kioskBox.x, y: kioskBox.y + kioskBox.h / 2 + 1 },
+      // Served from any side of the container: half its length plus a step.
+      counterReach: kioskBox.w / 2 + 2,
+      pump: { x: pump.x - 1.2, y: pump.y },
+      beach: { x: swim.x, y: shoreY + 8 },
       motorcycle,
       workbench,
       garageFront: { x: garageBox.x, y: garageBox.y + garageBox.h / 2 + 2 },
     },
     herdPath: [extend(center, turn, 200), turn, center, herdMeeting],
+    hangouts: {
+      pump: { x: pump.x - 1.5, y: pump.y + 1.5 },
+      club: { x: clubBlock.x, y: clubBlock.y + clubBlock.h / 2 + 3 },
+      schoolField: schoolField,
+      ourField: { x: ourField.x - 4, y: ourField.y + 4 },
+      // The bench under the birch by the fence, on the street side of the front garden.
+      grandmaBench: { x: mainRoute[0].x - 4, y: -8 },
+      kiosk: { x: kioskBox.x + 4, y: kioskBox.y - kioskBox.h / 2 - 2 },
+      beach: { x: swim.x + 6, y: shoreY + 10 },
+    },
     herdHomePath: [herdMeeting, { x: mainRoute[0].x, y: grandmaHouse.h / 2 + 4 }],
   };
 }

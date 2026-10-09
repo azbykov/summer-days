@@ -37,7 +37,8 @@ npm run build
 
 ## Controls
 
-Arrow keys or WASD to walk or ride.
+Arrow keys or WASD to walk or ride. Hold Shift to run on foot: faster, but it
+uses up stamina.
 
 E next to the bicycle gets on it; E again gets off and leaves the bike where you
 stopped. The bicycle starts the day in grandma's back yard.
@@ -49,8 +50,10 @@ picks one and Q steps away.
 Q outside a conversation opens and closes what you carry: five slots with
 items, and the money in the pocket. Same things stack; a sixth kind of thing
 does not fit. With it open, 1–5 picks a slot: ice cream can be eaten,
-«Буратино» drunk, gum chewed. It does nothing else, on purpose. E at grandma's front door goes inside — from 19:00 on,
-that ends the day.
+«Буратино» drunk, gum chewed. It does nothing else, on purpose.
+
+E at grandma's front door goes inside: 1 naps — from half an hour to six hours,
+the more tired the longer — and from 19:00 on, 2 goes to bed and ends the day.
 
 ### Development starts
 
@@ -83,6 +86,13 @@ landmarks are a temporary development aid.
 
 The bicycle works: get on, ride, get off, and it stays where it was left.
 
+Next to the clock are four bars: food, water, sleep and stamina. The first
+three run down with game time; stamina drains while running, a little while
+walking, and refills standing still or riding, Diablo 2 style. Anything eaten or drunk refills stamina at once.
+Water: «Буратино» or the pump on Vysokaya street, halfway to the kiosk. Numbers are in
+`src/content/needs.json`. Sleep comes back with a nap at home; when it runs low, people remark on it.
+Empty food and water bars have no effect yet.
+
 The day from `docs/MVP.md` plays out, with placeholder figures:
 
 - grandma in the front garden sends the player to grandpa and asks to be back
@@ -93,6 +103,10 @@ The day from `docs/MVP.md` plays out, with placeholder figures:
   asked;
 - local kids at the school field, 10:00–17:00, offer a game; playing takes an
   hour of game time;
+- three friends wander between hangouts — the pump, the club, the fields,
+  grandma's bench, the kiosk — along the streets; passing by, they call the
+  player to football or swimming, once each; swimming at the beach works
+  alone too;
 - the herd walks in along the Bralgino road from the map edge, reaches the bus
   stop at 19:00 and waits 15 minutes. Met there, grandma's cow (the ginger one)
   follows the player home; otherwise grandma meets her;

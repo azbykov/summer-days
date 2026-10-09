@@ -1,12 +1,17 @@
 import Phaser from 'phaser';
 import day from '../content/day.json';
 import dialogue from '../content/dialogue.json';
+import friendsConfig from '../content/friends.json';
 import items from '../content/items.json';
+import needsConfig from '../content/needs.json';
 import shopConfig from '../content/shop.json';
 import { clockTime, type GameClock } from '../systems/GameClock';
+import { Needs, type Need } from '../systems/Needs';
 import type { DialogueBox, Line, Option } from '../ui/DialogueBox';
+import { Friends } from './Friends';
 import { Herd } from './Herd';
 import { Motorcycle } from './Motorcycle';
+import { Navigation } from './Navigation';
 import { Inventory, itemName, type ItemId } from './Inventory';
 import { Shop } from './Shop';
 import type { Layout, Point } from './layout';
@@ -25,10 +30,13 @@ export class DayEvents {
   readonly motorcycle: Motorcycle;
   readonly shop: Shop;
   readonly inventory = new Inventory();
+  readonly needs = new Needs();
+  private friends: Friends;
 
   private grandma: Phaser.GameObjects.Image;
   private grandpa: Phaser.GameObjects.Image;
   private breadDelivered = false;
+  private remarkedAt = new Map<string, number>();
   private kids: { image: Phaser.GameObjects.Image; goal: Point }[] = [];
   private ball: Phaser.GameObjects.Image;
 
@@ -62,6 +70,15 @@ export class DayEvents {
     this.herd = new Herd(scene, layout.herdPath, layout.herdHomePath, spots.barnDoor, px);
     this.motorcycle = new Motorcycle(dialogueBox, izh.position, spots.workbench, izh.ride, this.inventory);
     this.shop = new Shop(dialogueBox, this.inventory, () => clock.minutes);
+    this.friends = new Friends(
+      scene,
+      layout.hangouts,
+      new Navigation(layout.roads),
+      dialogueBox,
+      px,
+      (friend) => this.swim(friend),
+      (friend) => this.sleepyRemark(friend, 'friend'),
+    );
   }
 
   /** Grandma is in the yard when the day starts and tells what today is about. */
@@ -77,7 +94,8 @@ export class DayEvents {
   useSlot(index: number): void {
     const slot = this.inventory.contents[index];
     if (!slot) return;
-    const item: { name: string; use?: { verb: string; text: string } } = items.items[slot.id];
+    const item: { name: string; use?: { verb: string; text: string; restores?: Partial<Record<Need, number>> } } =
+      items.items[slot.id];
     const name = itemName(slot.id);
     const title = name.charAt(0).toUpperCase() + name.slice(1);
     if (!item.use) {
@@ -90,10 +108,27 @@ export class DayEvents {
         label: use.verb,
         run: () => {
           this.inventory.take(slot.id);
+          this.needs.consume(use.restores ?? {});
           this.dialogueBox.say([['', use.text]]);
         },
       },
     ]);
+  }
+
+  /** Swimming at the beach, alone or with a friend who came along. */
+  private swim(friend: string | null): void {
+    const { swim } = friendsConfig;
+    this.fade(() => {
+      this.clock.advance(swim.minutes);
+      this.needs.consume({});
+      if (friend) this.friends.doneSwimming(friend);
+      this.dialogueBox.say(friend ? [['', swim.together], [friend, swim.after]] : [['', swim.alone]]);
+    }, 600);
+  }
+
+  private drinkFromPump(): void {
+    this.needs.consume(needsConfig.pump);
+    this.dialogueBox.say(lines('pumpDrink'));
   }
 
   /** What the morning talk leaves the player with, for starts that skip it. */
@@ -109,6 +144,7 @@ export class DayEvents {
   update(player: Point, dt: number): void {
     const now = this.clock.minutes;
     this.herd.update(now, player, dt);
+    this.friends.update(now, player, dt);
     this.updateFootball(player, now, dt);
   }
 
@@ -121,10 +157,19 @@ export class DayEvents {
       { at: this.at(this.grandma), hint: talk, reach, run: () => this.talkToGrandma() },
       { at: this.at(this.grandpa), hint: talk, reach, run: () => this.talkToGrandpa() },
       { at: spots.door, hint: 'E — в дом', reach, run: () => this.goInside() },
-      { at: spots.counter, hint: 'E — магазин', reach, run: () => this.shop.visit() },
+      {
+        at: spots.seller,
+        hint: 'E — магазин',
+        reach: spots.counterReach,
+        run: () => this.shop.visit(this.sleepyRemark('Продавщица', 'Продавщица')),
+      },
+      { at: spots.pump, hint: 'E — колонка', reach, run: () => this.drinkFromPump() },
+      { at: spots.beach, hint: 'E — искупаться', reach: 8, run: () => this.swim(this.friends.swimmerAtBeach()) },
       { at: this.motorcycle.position(), hint: 'E — ИЖ', reach: 2.5, run: () => this.motorcycle.inspect() },
       { at: spots.workbench, hint: 'E — верстак', reach: 2, run: () => this.motorcycle.inspectWorkbench() },
     ];
+    const friend = this.friends.near(player, reach);
+    if (friend) candidates.push({ at: friend.at, hint: talk, reach, run: friend.talk });
     if (this.kidsPresent()) {
       for (const kid of this.kids) {
         candidates.push({ at: this.at(kid.image), hint: talk, reach: reach * 2, run: () => this.talkToKids() });
@@ -148,11 +193,12 @@ export class DayEvents {
       return;
     }
     const bread = this.handOverBread();
+    const sleepy = this.sleepyRemark('Бабушка', 'Бабушка');
     if (this.visitedGrandpa) {
-      this.dialogueBox.say([...bread, ...lines('grandmaDayAfterGrandpa')]);
+      this.dialogueBox.say([...sleepy, ...bread, ...lines('grandmaDayAfterGrandpa')]);
       return;
     }
-    this.dialogueBox.choose([...bread, ...lines('grandmaDayBeforeGrandpa')], [this.askWhereGrandpaLives()]);
+    this.dialogueBox.choose([...sleepy, ...bread, ...lines('grandmaDayBeforeGrandpa')], [this.askWhereGrandpaLives()]);
   }
 
   /** Bread in the pocket goes to grandma; without it she reminds once per talk. */
@@ -185,12 +231,13 @@ export class DayEvents {
   }
 
   private talkToGrandpa(): void {
+    const sleepy = this.sleepyRemark('Дед', 'Дед');
     if (this.visitedGrandpa) {
-      this.dialogueBox.say(lines('grandpaAgain'));
+      this.dialogueBox.say([...lines('grandpaAgain'), ...sleepy]);
       return;
     }
     this.visitedGrandpa = true;
-    this.dialogueBox.say(lines('grandpaFirst'));
+    this.dialogueBox.say([...lines('grandpaFirst'), ...sleepy]);
   }
 
   private talkToKids(): void {
@@ -218,11 +265,42 @@ export class DayEvents {
     );
   }
 
+  /** Home: a nap any time; from the evening on, bed for the night. */
   private goInside(): void {
-    if (this.clock.minutes < this.doorOpensAt) {
-      this.dialogueBox.say(lines('doorTooEarly'));
+    const options: Option[] = [{ label: 'поспать', run: () => this.nap() }];
+    if (this.clock.minutes >= this.doorOpensAt) options.push({ label: 'лечь спать до утра', run: () => this.goToBed() });
+    this.dialogueBox.choose(lines('houseDoor'), options);
+  }
+
+  private nap(): void {
+    const minutes = this.needs.napMinutes();
+    if (minutes === 0) {
+      this.dialogueBox.say(lines('napNotSleepy'));
       return;
     }
+    this.fade(() => {
+      this.clock.advance(minutes);
+      // Hunger and thirst run on while asleep; then the sleep is made up.
+      this.needs.update(this.clock.minutes, 0, 'still');
+      this.needs.wakeUp();
+      this.dialogueBox.say(lines('napWoke'));
+    }, 800);
+  }
+
+  /**
+   * Sleepy enough, people notice — each in their own words, not every time:
+   * at most once per person in a couple of game hours.
+   */
+  private sleepyRemark(speaker: string, voice: keyof typeof dialogue.sleepyRemarks): Line[] {
+    if (!this.needs.sleepy) return [];
+    const now = this.clock.minutes;
+    if (now - (this.remarkedAt.get(speaker) ?? -Infinity) < needsConfig.sleepyRemarkEveryGameMinutes) return [];
+    this.remarkedAt.set(speaker, now);
+    const options = dialogue.sleepyRemarks[voice];
+    return [[speaker, options[Math.floor(now) % options.length]]];
+  }
+
+  private goToBed(): void {
     // Grandma has her say before bed, even if the player walks straight in.
     if (!this.eveningTalkDone) {
       this.eveningTalkDone = true;

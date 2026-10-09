@@ -1,0 +1,32 @@
+{
+  "start": {
+    "hunger": 80,
+    "thirst": 80,
+    "sleep": 100,
+    "stamina": 100
+  },
+  "lossPerGameHour": {
+    "hunger": 6,
+    "thirst": 8,
+    "sleep": 5
+  },
+  "runSpeedMultiplier": 1.5,
+  "stamina": {
+    "drainPerSecondRunning": 9,
+    "drainPerSecondWalking": 0.3,
+    "regenPerSecondStanding": 3.5,
+    "regenPerSecondRiding": 1.75,
+    "runAgainAt": 25
+  },
+  "pump": {
+    "thirst": 100
+  },
+  "nap": {
+    "minGameMinutes": 30,
+    "maxGameMinutes": 360,
+    "restoresTo": 95,
+    "notSleepyAbove": 90
+  },
+  "sleepyBelow": 30,
+  "sleepyRemarkEveryGameMinutes": 120
+}
