@@ -1,5 +1,9 @@
 {
   "startHour": 8,
   "startMinute": 0,
-  "gameMinutesPerRealSecond": 0.6
+  "gameMinutesPerRealSecond": 0.6,
+  "summer": {
+    "firstDate": "06-01",
+    "lastDate": "08-30"
+  }
 }

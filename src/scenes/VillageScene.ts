@@ -1,12 +1,16 @@
 import Phaser from 'phaser';
 import needsConfig from '../content/needs.json';
+import town from '../content/town.json';
 import worldConfig from '../content/world.json';
-import { GameClock } from '../systems/GameClock';
+import dialogueConfig from '../content/dialogue.json';
+import { dayOf, formatDate, weekdayName } from '../systems/Calendar';
+import { GameClock, clockTime } from '../systems/GameClock';
 import type { Pace } from '../systems/Needs';
 import { DialogueBox } from '../ui/DialogueBox';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { NeedsBars } from '../ui/NeedsBars';
 import { DayEvents } from '../world/DayEvents';
+import { Summer, type Parked } from '../world/Summer';
 import { buildLayout, type Block, type BlockKind, type Layout, type Road } from '../world/layout';
 
 const PX = worldConfig.pxPerMeter;
@@ -66,9 +70,11 @@ type Vehicle = {
 /**
  * One scene for the whole MVP map: Vysokaya, both roads and Shestovo.
  * Layout is placeholder geometry on real coordinates (src/world/layout.ts).
+ * Every morning the scene starts over; `Summer` carries what lasts.
  */
 export class VillageScene extends Phaser.Scene {
-  private clock = new GameClock();
+  private summer!: Summer;
+  private clock!: GameClock;
   private player!: Phaser.Physics.Arcade.Sprite;
   /** Vehicles stay wherever they were left; hidden while ridden. */
   private bike!: Vehicle;
@@ -78,6 +84,7 @@ export class VillageScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
   private useKey!: Phaser.Input.Keyboard.Key;
   private noKey!: Phaser.Input.Keyboard.Key;
+  private waitKey!: Phaser.Input.Keyboard.Key;
   private numberKeys!: Phaser.Input.Keyboard.Key[];
   private dialogue!: DialogueBox;
   private inventoryPanel!: InventoryPanel;
@@ -96,8 +103,16 @@ export class VillageScene extends Phaser.Scene {
     super('village');
   }
 
-  create(): void {
-    this.createTextures();
+  create(data: { summer?: Summer }): void {
+    // The scene object outlives a restart: reset what belongs to one day.
+    const firstMorning = !data.summer;
+    this.summer = data.summer ?? this.newSummer();
+    // Market Sundays start when grandma leaves.
+    this.clock = new GameClock(this.summer.marketDay ? clockTime(town.grandmaLeaves) : undefined);
+    this.riding = null;
+    this.dayOver = false;
+    this.pace = 'still';
+    if (!this.textures.exists('player')) this.createTextures();
     const layout = buildLayout();
     const { minX, minY, maxX, maxY } = layout.bounds;
     const width = (maxX - minX) * PX;
@@ -153,10 +168,15 @@ export class VillageScene extends Phaser.Scene {
     >;
     this.useKey = this.input.keyboard!.addKey('E');
     this.noKey = this.input.keyboard!.addKey('Q');
+    this.waitKey = this.input.keyboard!.addKey('T');
     this.numberKeys = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'].map((k) => this.input.keyboard!.addKey(k));
 
     this.clockText = this.add
       .text(12, 10, '', { fontFamily: 'monospace', fontSize: '18px', color: '#e8e2cf' })
+      .setScrollFactor(0)
+      .setDepth(10);
+    this.add
+      .text(12, 32, `${formatDate(this.summer.day)}\n${weekdayName(this.summer.day)}`, { fontFamily: 'monospace', fontSize: '12px', color: '#c8c4b0' })
       .setScrollFactor(0)
       .setDepth(10);
 
@@ -174,16 +194,44 @@ export class VillageScene extends Phaser.Scene {
       this.dialogue,
       PX,
       (then, holdMs) => this.fadeThrough(then, holdMs),
-      (title) => this.endDay(title),
+      () => this.endDay(),
+      () => this.endSummer(),
+      this.summer,
       {
         position: () => ({ x: this.izh.image.x / PX, y: this.izh.image.y / PX }),
         ride: () => this.mount(this.izh),
       },
+      (at) => this.placePlayer(at),
     );
     this.inventoryPanel = new InventoryPanel(this, this.day.inventory);
     this.needsBars = new NeedsBars(this, this.day.needs, 84, 10);
-    if (this.devStart(layout)) this.day.skipMorning();
-    else this.day.start();
+    this.park(this.bike, this.summer.bike);
+    this.park(this.izh, this.summer.izh);
+    if (firstMorning && this.devStart(layout)) this.day.skipMorning();
+    else this.morningCard(() => this.day.start());
+  }
+
+  /** ?date=08-29 starts the summer on that day, for trying later days. */
+  private newSummer(): Summer {
+    const summer = new Summer();
+    const date = new URLSearchParams(window.location.search).get('date');
+    if (date) summer.day = Math.max(1, dayOf(date));
+    return summer;
+  }
+
+  private placePlayer(at: { x: number; y: number }): void {
+    if (this.riding) this.dismount();
+    this.player.body!.reset(at.x * PX, at.y * PX);
+    this.cameras.main.centerOn(at.x * PX, at.y * PX);
+  }
+
+  private park(vehicle: Vehicle, at: Parked | null): void {
+    if (at) vehicle.image.setPosition(at.x, at.y).setRotation(at.rotation);
+  }
+
+  private parked(vehicle: Vehicle): Parked {
+    const { x, y, rotation } = vehicle.image;
+    return { x, y, rotation };
   }
 
   /**
@@ -253,6 +301,13 @@ export class VillageScene extends Phaser.Scene {
       return;
     }
 
+    // T on foot: sit down and let some time pass.
+    if (Phaser.Input.Keyboard.JustDown(this.waitKey)) {
+      this.player.setVelocity(0, 0);
+      this.day.waitAWhile();
+      return;
+    }
+
     // People, the door and the IZH come first; the bike otherwise.
     const action = this.day.interactionAt(here);
     if (Phaser.Input.Keyboard.JustDown(this.useKey)) {
@@ -308,7 +363,53 @@ export class VillageScene extends Phaser.Scene {
     });
   }
 
-  private endDay(title: string): void {
+  /**
+   * Night: vehicles stay where they were left, the body rests, and the next
+   * date comes up before the morning starts.
+   */
+  private endDay(): void {
+    if (this.riding) this.dismount();
+    this.summer.bike = this.parked(this.bike);
+    this.summer.izh = this.parked(this.izh);
+    this.summer.needs.newDay();
+    this.summer.day += 1;
+    this.showTitle('', () => this.scene.restart({ summer: this.summer }));
+  }
+
+  /**
+   * Every morning opens on black with the date, the day of the week and the
+   * time the day starts at — not always 08:00 once days can start later.
+   */
+  private morningCard(then: () => void): void {
+    this.dayOver = true;
+    this.overlay.setAlpha(1);
+    const title = `${formatDate(this.summer.day)}\n${weekdayName(this.summer.day)}`.toUpperCase() + `\n${this.clock.format()}`;
+    const text = this.add
+      .text(this.scale.width / 2, this.scale.height / 2, title, { fontFamily: 'monospace', fontSize: '32px', color: '#e8e2cf', align: 'center' })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(31)
+      .setAlpha(0);
+    this.tweens.chain({
+      tweens: [
+        { targets: text, alpha: 1, duration: 900 },
+        { targets: text, alpha: 0, duration: 700, delay: 1600 },
+        { targets: this.overlay, alpha: 0, duration: 800 },
+      ],
+      onComplete: () => {
+        text.destroy();
+        this.dayOver = false;
+        then();
+      },
+    });
+  }
+
+  /** The parents have come: the summer is over and so is the game. */
+  private endSummer(): void {
+    this.showTitle(dialogueConfig.summerEnd);
+  }
+
+  private showTitle(title: string, then?: () => void): void {
     this.dayOver = true;
     this.player.setVelocity(0, 0);
     this.hint.setVisible(false);
@@ -322,7 +423,7 @@ export class VillageScene extends Phaser.Scene {
       targets: this.overlay,
       alpha: 1,
       duration: 1500,
-      onComplete: () => this.tweens.add({ targets: text, alpha: 1, duration: 1200 }),
+      onComplete: () => this.tweens.add({ targets: text, alpha: 1, duration: 1200, onComplete: then }),
     });
   }
 

@@ -54,8 +54,36 @@ items, and the money in the pocket. Same things stack; a sixth kind of thing
 does not fit. With it open, 1–5 picks a slot: ice cream can be eaten,
 «Буратино» drunk, gum chewed. It does nothing else, on purpose.
 
-E at grandma's front door goes inside: 1 naps — from half an hour to six hours,
-the more tired the longer — and from 19:00 on, 2 goes to bed and ends the day.
+E at grandma's front door goes inside: 1 naps — pick half an hour, an hour,
+two hours or until rested (sleep comes back at 20 per game hour, not at all when
+wide awake); with bread in the pocket, «поесть хлеба» fills food up (the loaf
+goes first, the black bread is for grandma); from 19:00 on, «лечь спать до
+утра» ends the day. At midnight grandma calls the player in anyway.
+
+The summer runs from 1 June to 30 August. After a night the next date comes up
+and the morning starts again at grandma's: sleep full, food and water +40, the
+pocket, money and the IZH as they were, vehicles where they were left. People,
+the herd, football and errands start afresh; grandma gives 10 rubles for bread
+every morning and keeps asking about grandpa until he is visited. On the
+morning of 30 August the parents come and the game ends. The summer is 1999:
+1 June is a Tuesday. Every morning opens on black with the date, the day of the
+week and the time the day starts; date and weekday are also under the clock.
+
+Every Sunday grandma leaves for the market in Chkalovsk at 8:00 and is back at
+16:00. On Saturday she asks in the morning whether the player wants to come and
+help. For trying it out, any talk with her on any day has «поехать с тобой на
+рынок»: then «подождать до завтра» (the trip is tomorrow, whatever the weekday)
+or «сразу утро, 8:00» (straight to the next morning and onto the bus). Agreed,
+Sunday grandma wakes the player for the 8:00 bus: an hour on the bus, the market in a fade (grandma feeds
+the player pies and kvass), and at 15:00 — over a pixel still of the two of
+them by their stall — she pays 30 rubles and lets the player go round the shops — a grocery, car parts for the IZH (a new spark plug
+fixes the spark like cleaning does) and a newspaper kiosk with magazines that
+can be read from the inventory and are kept. «к бабушке, на автобус» brings
+both back to the yard at 16:00. Not agreed, there is a note on the table and
+grandma is away until 16:00.
+
+T on foot, anywhere, sits down to let time pass: 15 minutes, half an hour or an
+hour. Needs run on meanwhile; the legs get rested.
 
 ### Development starts
 
@@ -64,7 +92,9 @@ Skip the morning and the ride:
 - http://localhost:5173/?start=garage — by grandpa's garage at 12:00, bike next
   to you;
 - http://localhost:5173/?start=herd — at the bus stop at 18:50, just before the
-  herd.
+  herd;
+- http://localhost:5173/?date=08-29 — start the summer on another day (works
+  with `start` too); `?date=06-05` is a Saturday, to agree on the market.
 
 ## Structure
 
@@ -112,8 +142,8 @@ The day from `docs/MVP.md` plays out, with placeholder figures:
 - the herd walks in along the Bralgino road from the map edge, reaches the bus
   stop at 19:00 and waits 15 minutes. Met there, grandma's cow (the ginger one)
   follows the player home; otherwise grandma meets her;
-- in the evening grandma reacts to how the day went; going inside ends the day
-  with «2 ИЮНЯ».
+- in the evening grandma reacts to how the day went; going to bed shows the next
+  date and starts the next morning, up to 30 August.
 
 Goods and prices are in `src/content/shop.json`; item names and their 12×12
 pixel icons in `src/content/items.json`. Times, counts and distances are

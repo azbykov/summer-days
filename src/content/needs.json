@@ -22,11 +22,20 @@
     "thirst": 100
   },
   "nap": {
-    "minGameMinutes": 30,
-    "maxGameMinutes": 360,
+    "restoresPerGameHour": 20,
     "restoresTo": 95,
+    "choiceMinutes": [30, 60, 120],
     "notSleepyAbove": 90
   },
+  "night": {
+    "sleep": 100,
+    "hunger": 40,
+    "thirst": 40
+  },
+  "homeBread": {
+    "hunger": 100
+  },
+  "waitMinutes": [15, 30, 60],
   "sleepyBelow": 30,
   "sleepyRemarkEveryGameMinutes": 120
 }

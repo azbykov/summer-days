@@ -55,23 +55,47 @@ export class Needs {
     return this.sleep < needs.sleepyBelow;
   }
 
-  /**
-   * How long a nap at home would last: the more tired, the longer — from half
-   * an hour when just a bit sleepy to six hours when dead on one's feet.
-   * 0 when the player is not sleepy enough to fall asleep.
-   */
-  napMinutes(): number {
-    const { minGameMinutes, maxGameMinutes, notSleepyAbove } = needs.nap;
-    if (this.sleep >= notSleepyAbove) return 0;
-    const tiredness = (notSleepyAbove - this.sleep) / notSleepyAbove;
-    return Math.round(minGameMinutes + (maxGameMinutes - minGameMinutes) * tiredness);
+  /** Not tired enough to fall asleep in the daytime. */
+  get wideAwake(): boolean {
+    return this.sleep >= needs.nap.notSleepyAbove;
   }
 
-  /** After the nap's hours have been accounted for. */
-  wakeUp(): void {
-    this.sleep = needs.nap.restoresTo;
+  /**
+   * How long a nap takes to sleep it off: sleep comes back at
+   * `restoresPerGameHour` up to `restoresTo`, rounded up to a quarter hour.
+   */
+  minutesToRest(): number {
+    const { restoresPerGameHour, restoresTo } = needs.nap;
+    const hours = Math.max(0, restoresTo - this.sleep) / restoresPerGameHour;
+    return Math.ceil((hours * 60) / 15) * 15;
+  }
+
+  /**
+   * Woke up after `minutes` of sleep, once `update` has already run the
+   * clock over them: the sleep lost meanwhile is given back on top of what
+   * the nap restores, so `restoresPerGameHour` is the net gain.
+   */
+  wakeUp(minutes: number): void {
+    const { restoresPerGameHour, restoresTo } = needs.nap;
+    const hours = minutes / 60;
+    const restored = this.sleep + (needs.lossPerGameHour.sleep + restoresPerGameHour) * hours;
+    this.sleep = Math.min(restored, restoresTo);
     this.stamina = MAX;
     this.exhausted = false;
+  }
+
+  /**
+   * A night in bed: rested, and grandma's breakfast puts some food and water
+   * back. The clock starts again in the morning, so needs pick up from there.
+   */
+  newDay(): void {
+    const { night } = needs;
+    this.sleep = night.sleep;
+    this.hunger = clamp(this.hunger + night.hunger);
+    this.thirst = clamp(this.thirst + night.thirst);
+    this.stamina = MAX;
+    this.exhausted = false;
+    this.lastMinutes = null;
   }
 
   /** Something eaten or drunk: its own need goes up, stamina is full again. */

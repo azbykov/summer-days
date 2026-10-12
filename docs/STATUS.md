@@ -28,7 +28,18 @@ reasoning. Last updated: 2026-10-09, `main` at `5319c8b`.
 ## What the game is now
 
 Top-down Phaser 3 + TypeScript + Vite. One scene with the whole MVP map of
-Высокая on real coordinates; one playable day, 08:00 to bed, ending «2 ИЮНЯ».
+Высокая on real coordinates; the summer from 1 June to 30 August: each day 08:00 to bed (grandma calls
+the player in at midnight), the next date, a new morning; on 30 August the
+parents come and the game ends («ЛЕТО КОНЧИЛОСЬ»). `Summer`
+(`src/world/Summer.ts`) carries the date, pockets, needs, IZH facts, parked
+vehicles and whether grandpa was visited; the scene restarts every morning.
+  The summer is 1999 (1 June a Tuesday); each morning opens with a card
+  «2 ИЮНЯ / СРЕДА». **Market:** on Saturday the player agrees with grandma
+  (her morning offer, or — for testing, any day — an option in any talk with
+  «подождать до завтра» / «сразу утро, 8:00»); Sunday then starts with the 8:00 bus,
+  the trip passes in a fade, at 15:00 grandma pays 30 rubles and town is a
+  screen with three shops (`town.json`), home at 16:00. Without the player
+  she is away 8:00–16:00 and leaves a note.
 
 - **Map.** Real geography from the author's marks (`docs/map/places.json`),
   converted to meters by `tools/map-editor/export.py` into
@@ -52,8 +63,9 @@ Top-down Phaser 3 + TypeScript + Vite. One scene with the whole MVP map of
   late-90s prices. **Inventory** on Q: 5 slots, stacking, money; 1–5 picks a
   slot to eat/drink (ice cream, «Буратино», gum, батон).
 - **Needs** next to the clock: food, water, sleep, stamina (Diablo 2 style).
-  Eating/drinking refills stamina. **Nap** at grandma's door: 30 min–6 h by
-  tiredness; people remark when sleep is low. Empty food/water have no effect
+  Eating/drinking refills stamina. **Nap** at grandma's door: the player picks
+  30 min / 1 h / 2 h / until rested (+20 sleep per game hour); people remark
+  when sleep is low. **T** anywhere on foot waits 15 / 30 / 60 min. Empty food/water have no effect
   yet.
 - **Pump** by Vysokaya street halfway to the kiosk (drink to full).
 - **Herd** walks in along the Bralgino road, reaches the bus stop at 19:00,
@@ -78,17 +90,22 @@ src/world/Herd.ts            the herd and grandma's cow
 src/world/Friends.ts         friends' wandering and invites
 src/world/Navigation.ts      road graph for walking routes
 src/world/Motorcycle.ts      IZH diagnosis, repair and riding hook
-src/world/Shop.ts            kiosk counter
+src/world/Shop.ts            a shop counter: the kiosk and the town shops
 src/world/Inventory.ts       5-slot inventory and money
-src/systems/GameClock.ts     game time
+src/systems/GameClock.ts     game time (one day; restarts each morning)
+src/systems/Calendar.ts      day of the summer <-> «2 июня»
+src/world/Summer.ts          what carries over between days
+src/world/Market.ts          Saturday agreement, Sunday trip and town shops
+src/ui/TownBackdrop.ts       the screen standing in for Chkalovsk: caption or picture
 src/systems/Needs.ts         hunger, thirst, sleep, stamina, naps
 src/ui/                      DialogueBox, InventoryPanel, NeedsBars
 src/content/*.json           every number, line, portrait and icon
 tools/map-editor/            local map/photo editor + export to geography.json
 ```
 
-Content is data: lines in `dialogue.json` / `friends.json`, portraits and icons
-as character grids in `portraits.json` / `items.json` (one letter per pixel).
+Content is data: lines in `dialogue.json` / `friends.json`, portraits, icons
+and pictures as character grids in `portraits.json` / `items.json` /
+`scenes.json` (one letter per pixel; the market picture is 100×56 at ×6).
 
 ## How to check work
 
@@ -114,13 +131,17 @@ as character grids in `portraits.json` / `items.json` (one letter per pixel).
 - Cards (bench by grandma's by day, by the club in the evening) and fishing
   (where, and whose rod) — offered, not built.
 - Reproduce family houses literally or not.
+- Real lines for later mornings, for the parents on 30 August and for the
+  market; what grandma really sold and how they got to Chkalovsk.
 
 ## Suggested next steps
 
 In the author's interest order as last discussed:
 
-1. **A second day** — carry the world over to the next morning so "what do you
-   want to do tomorrow" can be tested.
+1. **Days that differ** — the summer runs to 30 August now, but every day is
+   the same; weekly or one-off events would make "what do you want to do
+   tomorrow" matter.
 2. **Evening and night** lighting.
 3. **Recognisable art** for the key places, from `MAP.md` descriptions.
-4. Sounds; people noticing hunger/thirst; grandpa teaching about the IZH.
+4. Saving the summer between browser sessions (now a reload starts over).
+5. Sounds; people noticing hunger/thirst; grandpa teaching about the IZH.

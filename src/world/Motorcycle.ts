@@ -12,20 +12,30 @@ import type { Point } from './layout';
  * dies; after that it starts and the IZH can be ridden. Getting off stalls
  * it, so every ride starts with the kickstarter.
  */
-export class Motorcycle {
+/** What has been done to the IZH so far; it carries over from day to day. */
+export type MotorcycleFacts = {
   /** The player has tried the kickstarter at least once. */
-  tried = false;
-  started = false;
+  tried: boolean;
+  started: boolean;
   /** Ridden at least once. */
-  ridden = false;
+  ridden: boolean;
+  fuel: boolean;
+  spark: boolean;
+  canisterTaken: boolean;
+};
+
+export function newMotorcycleFacts(): MotorcycleFacts {
+  return { tried: false, started: false, ridden: false, fuel: false, spark: false, canisterTaken: false };
+}
+
+export class Motorcycle {
+  /** The engine dies overnight with everything else. */
   running = false;
 
-  private fuel = false;
-  private spark = false;
   private readonly air = true;
-  private canisterTaken = false;
 
   constructor(
+    private facts: MotorcycleFacts,
     private dialogueBox: DialogueBox,
     /** Where the IZH stands now: it stays wherever it was left. */
     readonly position: () => Point,
@@ -44,7 +54,7 @@ export class Motorcycle {
       this.dialogueBox.choose(lines('izhRunning'), [this.rideOption(), this.stallOption()]);
       return;
     }
-    const tank: Option = this.fuel
+    const tank: Option = this.facts.fuel
       ? { label: 'бак', run: () => this.say('izhTankFull') }
       : this.inventory.has('canister')
         ? { label: 'залить бензин', run: () => this.fillTank() }
@@ -76,31 +86,31 @@ export class Motorcycle {
   }
 
   private kick(): void {
-    const fixed = this.fuel && this.spark && this.air;
-    if (fixed && !this.started) {
+    const fixed = this.facts.fuel && this.facts.spark && this.air;
+    if (fixed && !this.facts.started) {
       // The first time it only catches and dies: "О. Живой ещё."
       this.say('izhKickFirstStart');
-      this.started = true;
-      this.tried = true;
+      this.facts.started = true;
+      this.facts.tried = true;
       return;
     }
     if (fixed) {
       this.running = true;
-      const firstRun = !this.ridden ? lines('grandpaFirstRun') : [];
+      const firstRun = !this.facts.ridden ? lines('grandpaFirstRun') : [];
       this.dialogueBox.choose([...lines('izhKickRuns'), ...firstRun], [this.rideOption(), this.stallOption()]);
       return;
     }
-    const attempt = !this.fuel && !this.spark ? 'izhKickNothing' : this.fuel ? 'izhKickNoSpark' : 'izhKickNoFuel';
+    const attempt = !this.facts.fuel && !this.facts.spark ? 'izhKickNothing' : this.facts.fuel ? 'izhKickNoSpark' : 'izhKickNoFuel';
     // Grandpa hears it from the yard the first time.
-    this.dialogueBox.say([...lines(attempt), ...(this.tried ? [] : lines('grandpaFirstFailedKick'))]);
-    this.tried = true;
+    this.dialogueBox.say([...lines(attempt), ...(this.facts.tried ? [] : lines('grandpaFirstFailedKick'))]);
+    this.facts.tried = true;
   }
 
   private rideOption(): Option {
     return {
       label: 'сесть и поехать',
       run: () => {
-        this.ridden = true;
+        this.facts.ridden = true;
         this.ride();
       },
     };
@@ -117,7 +127,7 @@ export class Motorcycle {
   }
 
   private fillTank(): void {
-    this.fuel = true;
+    this.facts.fuel = true;
     // Emptied into the tank, the canister stays in the garage.
     this.inventory.take('canister');
     this.say('izhTankFilled');
@@ -125,22 +135,35 @@ export class Motorcycle {
 
   private checkPlug(): void {
     if (!this.inventory.has('plugKey')) return this.say('izhPlugNoKey');
-    if (this.spark) return this.say('izhPlugClean');
+    if (this.facts.spark) return this.say('izhPlugClean');
+    const fresh: Option[] = this.inventory.has('sparkPlug')
+      ? [
+          {
+            label: 'поставить новую свечу',
+            run: () => {
+              this.inventory.take('sparkPlug');
+              this.facts.spark = true;
+              this.say('izhPlugNew');
+            },
+          },
+        ]
+      : [];
     this.dialogueBox.choose(lines('izhPlugDirty'), [
       {
         label: 'почистить',
         run: () => {
-          this.spark = true;
+          this.facts.spark = true;
           this.say('izhPlugCleaned');
         },
       },
+      ...fresh,
     ]);
   }
 
   private lookUnderWorkbench(): void {
-    if (this.canisterTaken) return this.say('workbenchUnderEmpty');
+    if (this.facts.canisterTaken) return this.say('workbenchUnderEmpty');
     if (!this.inventory.add('canister')) return this.say('pocketsFull');
-    this.canisterTaken = true;
+    this.facts.canisterTaken = true;
     this.say('workbenchUnder');
   }
 

@@ -14,7 +14,8 @@
     "offerRadiusMeters": 12
   },
   "home": {
-    "doorOpensAt": "19:00"
+    "doorOpensAt": "19:00",
+    "lightsOut": "24:00"
   },
   "talkRadiusMeters": 3
 }

@@ -28,6 +28,7 @@ export class DialogueBox {
   private lines: Line[] = [];
   private choice: Choice | null = null;
   private options: Option[] = [];
+  private onLeave: (() => void) | null = null;
   private onDone: (() => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
@@ -69,6 +70,7 @@ export class DialogueBox {
     this.lines = [...lines];
     this.choice = null;
     this.options = [];
+    this.onLeave = null;
     this.onDone = onDone ?? null;
     this.setVisible(true);
     this.showNext();
@@ -81,10 +83,11 @@ export class DialogueBox {
     this.updateHint();
   }
 
-  /** Lines followed by numbered things to do. */
-  choose(lines: Line[], options: Option[]): void {
+  /** Lines followed by numbered things to do; `onLeave` runs when Q steps away. */
+  choose(lines: Line[], options: Option[], onLeave?: () => void): void {
     this.say(lines);
     this.options = options;
+    this.onLeave = onLeave ?? null;
     this.updateHint();
   }
 
@@ -98,8 +101,10 @@ export class DialogueBox {
     if (this.options.length > 0) {
       const picked = typeof key === 'number' ? this.options[key - 1] : undefined;
       if (picked || key === 'no') {
+        const leave = this.onLeave;
         this.close();
-        picked?.run();
+        if (picked) picked.run();
+        else leave?.();
       }
       return;
     }
@@ -146,6 +151,7 @@ export class DialogueBox {
   private close(): void {
     this.choice = null;
     this.options = [];
+    this.onLeave = null;
     this.onDone = null;
     this.setVisible(false);
   }

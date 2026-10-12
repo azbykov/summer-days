@@ -7,8 +7,9 @@ import timeConfig from '../content/time.json';
 export class GameClock {
   private elapsedMinutes: number;
 
-  constructor() {
-    this.elapsedMinutes = timeConfig.startHour * 60 + timeConfig.startMinute;
+  /** `startMinutes` since midnight; by default the usual 08:00 wake-up. */
+  constructor(startMinutes = timeConfig.startHour * 60 + timeConfig.startMinute) {
+    this.elapsedMinutes = startMinutes;
   }
 
   update(deltaMs: number): void {
