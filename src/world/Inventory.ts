@@ -33,6 +33,12 @@ export class Inventory {
     return true;
   }
 
+  /** Swaps in what a saved game had in the pocket. */
+  restore(slots: readonly Slot[], rubles: number): void {
+    this.slots = slots.map((s) => ({ ...s }));
+    this.rubles = rubles;
+  }
+
   take(id: ItemId): void {
     const slot = this.slots.find((s) => s.id === id);
     if (!slot) return;

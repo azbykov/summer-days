@@ -19,6 +19,8 @@ const PADDING = 16;
  *
  * E advances. A conversation can end in a yes/no question: E — yes, Q — no,
  * or in a short list of things to do: a number picks one, Q leaves.
+ * Everything can be tapped or clicked as well: the panel goes on, an option
+ * or «да» / «нет» picks, the hint in the corner does what it says.
  */
 export class DialogueBox {
   private panel: Phaser.GameObjects.Rectangle;
@@ -30,15 +32,21 @@ export class DialogueBox {
   private options: Option[] = [];
   private onLeave: (() => void) | null = null;
   private onDone: (() => void) | null = null;
+  /** The things to pick at the end of a talk, as buttons under the line. */
+  private buttons: Phaser.GameObjects.Text[] = [];
+  private scene: Phaser.Scene;
 
   constructor(scene: Phaser.Scene) {
+    this.scene = scene;
     const { width, height } = scene.scale;
     this.panel = scene.add
       .rectangle(width / 2, height - MARGIN, width - MARGIN * 2, PANEL_HEIGHT, 0x14160f, 0.88)
       .setOrigin(0.5, 1)
       .setStrokeStyle(1, 0x6a6a5a)
       .setScrollFactor(0)
-      .setDepth(20);
+      .setDepth(20)
+      .setInteractive()
+      .on('pointerdown', () => this.tapPanel());
     this.text = scene.add
       .text(0, height - MARGIN - PANEL_HEIGHT + 12, '', {
         fontFamily: 'monospace',
@@ -57,7 +65,10 @@ export class DialogueBox {
       .text(width - MARGIN - PADDING, height - MARGIN - 10, '', { fontFamily: 'monospace', fontSize: '13px', color: '#a8a48c' })
       .setOrigin(1, 1)
       .setScrollFactor(0)
-      .setDepth(21);
+      .setDepth(21)
+      .setPadding(8, 6)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.press(this.lines.length === 0 && (this.options.length > 0 || this.choice) ? 'no' : 'use'));
     this.setVisible(false);
   }
 
@@ -136,16 +147,53 @@ export class DialogueBox {
     this.updateHint();
   }
 
+  /**
+   * A tap on the panel itself only moves past a plain line, never answers.
+   * Taps act on pointerdown: the release of the tap that opened a talk must
+   * not skip its first line.
+   */
+  private tapPanel(): void {
+    if (this.lines.length > 0 || (this.options.length === 0 && !this.choice)) this.press('use');
+  }
+
   private updateHint(): void {
     const last = this.lines.length === 0;
     if (last && this.options.length > 0) {
-      // Non-breaking spaces keep each option whole when the line wraps.
-      const list = this.options.map((o, i) => `${i + 1} — ${o.label}`.replace(/ /g, '\u00a0')).join('   ');
-      this.text.setText(`${this.text.text.split('\n')[0]}\n${list}`);
+      this.showButtons(this.options.map((o, i) => [`${i + 1} — ${o.label}`, i + 1]));
       this.hint.setText('Q — отойти');
+    } else if (last && this.choice) {
+      this.showButtons([['E — да', 'use'], ['Q — нет', 'no']]);
+      this.hint.setText('');
     } else {
-      this.hint.setText(last && this.choice ? 'E — да    Q — нет' : 'E — дальше');
+      this.showButtons([]);
+      this.hint.setText('E — дальше');
     }
+  }
+
+  /** Options flow left to right under the line, wrapping inside the panel. */
+  private showButtons(items: [label: string, key: 'use' | 'no' | number][]): void {
+    this.buttons.forEach((b) => b.destroy());
+    const left = this.text.x;
+    const right = this.scene.scale.width - MARGIN - PADDING;
+    let x = left;
+    let y = this.text.y + this.text.height + 8;
+    this.buttons = items.map(([label, key]) => {
+      const button = this.scene.add
+        .text(x, y, label, { fontFamily: 'monospace', fontSize: '17px', color: '#f4efe0', backgroundColor: '#2e3026', padding: { x: 10, y: 7 } })
+        .setScrollFactor(0)
+        .setDepth(22)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerover', () => button.setColor('#f0c860'))
+        .on('pointerout', () => button.setColor('#f4efe0'))
+        .on('pointerdown', () => this.press(key));
+      if (x > left && x + button.width > right) {
+        x = left;
+        y += button.height + 6;
+        button.setPosition(x, y);
+      }
+      x += button.width + 10;
+      return button;
+    });
   }
 
   private close(): void {
@@ -153,6 +201,7 @@ export class DialogueBox {
     this.options = [];
     this.onLeave = null;
     this.onDone = null;
+    this.showButtons([]);
     this.setVisible(false);
   }
 

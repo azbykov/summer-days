@@ -1,6 +1,9 @@
 import needs from '../content/needs.json';
 
 export type Need = 'hunger' | 'thirst' | 'sleep';
+/** The body as saved: plain numbers. */
+export type NeedsSave = { hunger: number; thirst: number; sleep: number; stamina: number; exhausted: boolean };
+
 export type Pace = 'still' | 'walk' | 'run' | 'ride';
 
 const MAX = 100;
@@ -22,6 +25,17 @@ export class Needs {
   /** Ran dry: no running until stamina is back to `runAgainAt`. */
   private exhausted = false;
   private lastMinutes: number | null = null;
+
+  save(): NeedsSave {
+    const { hunger, thirst, sleep, stamina, exhausted } = this;
+    return { hunger, thirst, sleep, stamina, exhausted };
+  }
+
+  /** Back from a saved game; the clock picks up from the next update. */
+  restore(saved: NeedsSave): void {
+    Object.assign(this, saved);
+    this.lastMinutes = null;
+  }
 
   get canRun(): boolean {
     return !this.exhausted && this.stamina > 0;

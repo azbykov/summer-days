@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import needsConfig from '../content/needs.json';
 import town from '../content/town.json';
 import worldConfig from '../content/world.json';
+import arrivalConfig from '../content/arrival.json';
 import dialogueConfig from '../content/dialogue.json';
 import { dayOf, formatDate, weekdayName } from '../systems/Calendar';
 import { GameClock, clockTime } from '../systems/GameClock';
@@ -9,7 +10,9 @@ import type { Pace } from '../systems/Needs';
 import { DialogueBox } from '../ui/DialogueBox';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { NeedsBars } from '../ui/NeedsBars';
+import { Arrival } from '../world/Arrival';
 import { DayEvents } from '../world/DayEvents';
+import { forgetGame, saveGame, savedGame, type SavedGame, type TodaySave } from '../world/SavedGame';
 import { Summer, type Parked } from '../world/Summer';
 import { buildLayout, type Block, type BlockKind, type Layout, type Road } from '../world/layout';
 
@@ -17,6 +20,10 @@ const PX = worldConfig.pxPerMeter;
 const WALK_SPEED = worldConfig.walkSpeedMetersPerSecond * PX;
 const RUN_SPEED = WALK_SPEED * needsConfig.runSpeedMultiplier;
 const BIKE_REACH = worldConfig.bikeReachMeters * PX;
+/** Real seconds between autosaves. */
+const AUTOSAVE_SECONDS = 3;
+/** Dev starts (?start=, ?date=) skip the menu and never touch the saved game. */
+export const DEV_START = /[?&](start|date)=/.test(window.location.search);
 
 const COLOR_GRASS = 0x4f6b3a;
 const COLOR_PLAYER = 0xf0e0bd;
@@ -98,22 +105,37 @@ export class VillageScene extends Phaser.Scene {
   private clockText!: Phaser.GameObjects.Text;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
+  /** The latest moment worth coming back to: nobody talking, nothing fading. */
+  private lastSave: SavedGame | null = null;
+  private sinceSave = 0;
+  private summerOver = false;
+  /** Uncle Yura's car is bringing the player in: no walking yet. */
+  private cutscene = false;
+  private layout!: Layout;
 
   constructor() {
     super('village');
   }
 
-  create(data: { summer?: Summer }): void {
+  /** `today` picks a saved game up in the middle of a day. */
+  create(data: { summer?: Summer; today?: TodaySave | null }): void {
     // The scene object outlives a restart: reset what belongs to one day.
     const firstMorning = !data.summer;
+    const today = data.today ?? null;
     this.summer = data.summer ?? this.newSummer();
     // Market Sundays start when grandma leaves.
-    this.clock = new GameClock(this.summer.marketDay ? clockTime(town.grandmaLeaves) : undefined);
+    // The first day starts when uncle Yura's car gets to the village.
+    const start = this.summer.marketDay ? clockTime(town.grandmaLeaves) : this.summer.day === 1 ? clockTime(arrivalConfig.arrivesAt) : undefined;
+    this.clock = new GameClock(today ? today.minutes : start);
     this.riding = null;
     this.dayOver = false;
+    this.summerOver = false;
+    this.cutscene = false;
     this.pace = 'still';
+    this.sinceSave = 0;
     if (!this.textures.exists('player')) this.createTextures();
     const layout = buildLayout();
+    this.layout = layout;
     const { minX, minY, maxX, maxY } = layout.bounds;
     const width = (maxX - minX) * PX;
     const height = (maxY - minY) * PX;
@@ -166,6 +188,11 @@ export class VillageScene extends Phaser.Scene {
       string,
       Phaser.Input.Keyboard.Key
     >;
+    this.input.keyboard!.on('keydown-P', () => this.pause());
+    this.input.keyboard!.on('keydown-ESC', () => this.pause());
+    const saveOnHide = () => document.visibilityState === 'hidden' && void this.saveNow();
+    document.addEventListener('visibilitychange', saveOnHide);
+    this.events.once('shutdown', () => document.removeEventListener('visibilitychange', saveOnHide));
     this.useKey = this.input.keyboard!.addKey('E');
     this.noKey = this.input.keyboard!.addKey('Q');
     this.waitKey = this.input.keyboard!.addKey('T');
@@ -203,12 +230,93 @@ export class VillageScene extends Phaser.Scene {
       },
       (at) => this.placePlayer(at),
     );
-    this.inventoryPanel = new InventoryPanel(this, this.day.inventory);
+    this.inventoryPanel = new InventoryPanel(this, this.day.inventory, (slot) => this.takesSteps && this.day.useSlot(slot));
     this.needsBars = new NeedsBars(this, this.day.needs, 84, 10);
     this.park(this.bike, this.summer.bike);
     this.park(this.izh, this.summer.izh);
+    if (today) {
+      this.placePlayer(today.player);
+      this.day.resume(today.day);
+      this.lastSave = savedGame(this.summer.save(), today);
+      this.morningCard(() => {});
+      return;
+    }
+    // A new morning is a save of its own: coming back replays it from the start.
+    this.lastSave = savedGame(this.summer.save());
+    if (!DEV_START) void saveGame(this.lastSave);
     if (firstMorning && this.devStart(layout)) this.day.skipMorning();
-    else this.morningCard(() => this.day.start());
+    else this.morningCard(() => (this.summer.day === 1 ? this.arrive() : this.day.start()));
+  }
+
+  /** The first day: uncle Yura drives the player in to grandma's. */
+  private arrive(): void {
+    this.cutscene = true;
+    const arrival = new Arrival(this, this.dialogue, this.summer.inventory, PX, this.layout.arrival);
+    // Hidden out on the road, so nobody at home calls out before the car is there.
+    this.placePlayer(arrival.hiddenAt);
+    this.player.setVisible(false);
+    arrival.play({
+      getOut: (at) => {
+        this.placePlayer(at);
+        this.player.setVisible(true);
+        this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+      },
+      grandmaComes: (to) => this.day.meetCar(to),
+      welcome: () => {
+        this.cutscene = false;
+        this.day.welcome();
+      },
+    });
+  }
+
+  /** Walking about, not talking or watching a fade: on-screen controls show. */
+  get takesSteps(): boolean {
+    return !this.dayOver && !this.cutscene && !this.dialogue.open && this.overlay.alpha === 0;
+  }
+
+  /** P or Esc: everything stops under a pause screen; Esc there leaves for the menu. */
+  private pause(): void {
+    if (this.summerOver) {
+      this.scene.start('menu');
+      return;
+    }
+    this.player.setVelocity(0, 0);
+    void this.saveNow();
+    this.scene.launch('pause');
+    this.scene.pause();
+  }
+
+  /** Writes down the latest calm moment of the day. */
+  saveNow(): Promise<void> {
+    this.lastSave = this.snapshot() ?? this.lastSave;
+    if (DEV_START || this.summerOver || !this.lastSave) return Promise.resolve();
+    return saveGame(this.lastSave);
+  }
+
+  /**
+   * The game as it stands, or null in the middle of something — a talk, a
+   * fade, the trip to town — that a save could not pick up again.
+   */
+  private snapshot(): SavedGame | null {
+    // The arrival is not saved: coming back replays the first morning from the car.
+    if (this.dayOver || this.cutscene || this.dialogue.open || this.overlay.alpha > 0 || this.day.away) return null;
+    const summer = this.summer.save();
+    summer.bike = this.parked(this.bike);
+    summer.izh = this.parked(this.izh);
+    let player = { x: this.player.x, y: this.player.y };
+    if (this.riding) {
+      // Saved on the move: the vehicle stands where the player is, the player beside it.
+      const side = this.player.rotation;
+      const here: Parked = { x: this.player.x, y: this.player.y, rotation: side };
+      if (this.riding === this.bike) summer.bike = here;
+      else summer.izh = here;
+      player = { x: here.x + Math.cos(side) * PX * 1.4, y: here.y + Math.sin(side) * PX * 1.4 };
+    }
+    return savedGame(summer, {
+      minutes: this.clock.minutes,
+      player: { x: player.x / PX, y: player.y / PX },
+      day: this.day.save(),
+    });
   }
 
   /** ?date=08-29 starts the summer on that day, for trying later days. */
@@ -252,6 +360,11 @@ export class VillageScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (this.dayOver) return;
+    this.sinceSave += delta / 1000;
+    if (this.sinceSave >= AUTOSAVE_SECONDS) {
+      this.sinceSave = 0;
+      void this.saveNow();
+    }
     this.clock.update(delta);
     this.clockText.setText(this.clock.format());
     // Needs follow the clock, including jumps like a football match.
@@ -263,7 +376,7 @@ export class VillageScene extends Phaser.Scene {
     this.day.update(here, delta / 1000);
     this.inventoryPanel.refresh();
 
-    if (this.dialogue.open || this.overlay.alpha > 0) {
+    if (this.dialogue.open || this.overlay.alpha > 0 || this.cutscene) {
       if (Phaser.Input.Keyboard.JustDown(this.useKey)) this.dialogue.press('use');
       if (Phaser.Input.Keyboard.JustDown(this.noKey)) this.dialogue.press('no');
       this.numberKeys.forEach((k, i) => Phaser.Input.Keyboard.JustDown(k) && this.dialogue.press(i + 1));
@@ -379,6 +492,7 @@ export class VillageScene extends Phaser.Scene {
   /**
    * Every morning opens on black with the date, the day of the week and the
    * time the day starts at — not always 08:00 once days can start later.
+   * Space or a tap skips it.
    */
   private morningCard(then: () => void): void {
     this.dayOver = true;
@@ -390,23 +504,44 @@ export class VillageScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(31)
       .setAlpha(0);
-    this.tweens.chain({
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      chain.stop();
+      text.destroy();
+      this.overlay.setAlpha(0);
+      this.input.keyboard!.off('keydown-SPACE', finish);
+      this.input.off('pointerdown', finish);
+      this.dayOver = false;
+      then();
+    };
+    const chain = this.tweens.chain({
       tweens: [
         { targets: text, alpha: 1, duration: 900 },
         { targets: text, alpha: 0, duration: 700, delay: 1600 },
         { targets: this.overlay, alpha: 0, duration: 800 },
       ],
-      onComplete: () => {
-        text.destroy();
-        this.dayOver = false;
-        then();
-      },
+      onComplete: finish,
     });
+    // Space or a tap anywhere skips the card straight into the day.
+    this.input.keyboard!.on('keydown-SPACE', finish);
+    this.input.on('pointerdown', finish);
   }
 
   /** The parents have come: the summer is over and so is the game. */
   private endSummer(): void {
-    this.showTitle(dialogueConfig.summerEnd);
+    this.summerOver = true;
+    void forgetGame();
+    this.showTitle(dialogueConfig.summerEnd, () =>
+      this.add
+        .text(this.scale.width / 2, this.scale.height / 2 + 50, 'Esc — в меню', { fontFamily: 'monospace', fontSize: '14px', color: '#8a8672', padding: { x: 12, y: 8 } })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(31)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerup', () => this.scene.start('menu')),
+    );
   }
 
   private showTitle(title: string, then?: () => void): void {
@@ -510,12 +645,44 @@ export class VillageScene extends Phaser.Scene {
       graphics.generateTexture(key, 14, 28);
     }
 
+    // Uncle Yura's white VAZ 2101 from above, pointing up: ~1.6 x 4 m.
+    graphics.clear();
+    this.drawKopeyka(graphics);
+    graphics.generateTexture('kopeyka', 22, 48);
+
     graphics.clear();
     graphics.fillStyle(0xf0f0e8, 1);
     graphics.fillCircle(3, 3, 3);
     graphics.generateTexture('ball', 6, 6);
 
     graphics.destroy();
+  }
+
+  private drawKopeyka(graphics: Phaser.GameObjects.Graphics): void {
+    // Wheels just showing past the body.
+    graphics.fillStyle(COLOR_BIKE_TYRE, 1);
+    for (const [x, y] of [[0, 8], [19, 8], [0, 34], [19, 34]]) graphics.fillRect(x, y, 3, 7);
+    // Body, a shade darker at the edges.
+    graphics.fillStyle(0xc8c8c0, 1);
+    graphics.fillRect(1, 1, 20, 46);
+    graphics.fillStyle(0xeeeee6, 1);
+    graphics.fillRect(2, 2, 18, 44);
+    // Headlights and bumper chrome at the front, tail lights at the back.
+    graphics.fillStyle(0xf4e8a0, 1);
+    graphics.fillRect(3, 1, 4, 2);
+    graphics.fillRect(15, 1, 4, 2);
+    graphics.fillStyle(0x9a9a98, 1);
+    graphics.fillRect(1, 0, 20, 1);
+    graphics.fillRect(1, 47, 20, 1);
+    graphics.fillStyle(0xb83a2a, 1);
+    graphics.fillRect(2, 45, 4, 2);
+    graphics.fillRect(16, 45, 4, 2);
+    // Windscreen, roof and rear window.
+    graphics.fillStyle(0x3a4a5a, 1);
+    graphics.fillRect(4, 14, 14, 6);
+    graphics.fillRect(4, 33, 14, 4);
+    graphics.fillStyle(0xe2e2da, 1);
+    graphics.fillRect(4, 20, 14, 13);
   }
 
   private drawIzh(graphics: Phaser.GameObjects.Graphics): void {

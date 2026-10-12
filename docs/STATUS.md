@@ -77,13 +77,48 @@ vehicles and whether grandpa was visited; the scene restarts every morning.
   with a friend) takes ~45 min.
 - **Dialogue** box with 32×32 colour pixel portraits on the left; yes/no and
   numbered choices.
+- **Menu, pause, saving.** The game opens on `MenuScene` (continue / new game
+  with a confirmation). P or Esc pauses (`PauseScene` over the paused
+  village); Esc there saves and returns to the menu. One save in IndexedDB
+  (`summer-days` / `saves` / `current`, versioned): `Summer` at every morning,
+  plus a mid-day snapshot (clock, player, vehicles, `DayEvents` flags, the
+  cow, friends' asked invites) every 3 s when calm, on pause and on tab hide.
+  Not saved mid-talk, mid-fade or while in town. Friends' positions, kids and
+  herd are not saved — they follow the clock. Ending the summer deletes it.
+- **Intro** (`IntroScene`, text in `src/content/intro.json`) before a new
+  game; cards fade in and out by themselves or on Space / E / Enter / tap,
+  Esc skips. The morning date card is skippable with Space or a tap.
+- **Arrival** (`src/world/Arrival.ts`, lines in `src/content/arrival.json`,
+  route `layout.arrival`): day 1 starts at 10:30; дядя Юра's white VAZ 2101
+  comes in on the asphalt from the left past the club and down Vysokaya
+  street to grandma's (one spline, 28 m/s, ~10 s of driving). He talks on
+  the way: `ride[]` stops at fractions of the route, the car stands still
+  while each line is up (club library, new container shop, Лёха, grandpa,
+  pies, weekends). At the house `atHome`, then `motoMagazine`; grandma walks out to meet the car (`DayEvents.meetCar`) and
+  stays there for day 1; after the farewell the car drives on down the street
+  and grandma's `welcome()` gives a pie (+30 food), `grandmaMorning` without
+  its first line and the 10 rubles. A save during the drive replays it.
+- **Tablets** (the main testers own tablets). `TouchScene` runs on top on
+  touch devices (`pointer: coarse` or `?touch`): a floating stick in the left
+  45% below the inventory row (8 directions, full push = Shift), E/Q/T
+  buttons and a pause button. They press real keys through
+  `src/ui/VirtualKeys.ts`, so the game has one input path. Talks, inventory
+  slots, menu and pause screen are tapped directly; dialogue taps act on
+  pointerdown so the tap that opened a talk does not skip its first line.
+  Fullscreen item in the menu, home-screen meta tags, a «rotate» notice in
+  portrait, no zoom/scroll. `npm run dev:lan` serves to the local network.
+  Still 960×540 FIT: 4:3 tablets get bars.
 - Dev starts: `?start=garage` (12:00 by the garage), `?start=herd` (18:50 at
-  the bus stop).
+  the bus stop). Any `?start=`/`?date=` skips the menu and never saves.
 
 ## Code map
 
 ```
-src/scenes/VillageScene.ts   input, player, vehicles, rendering, HUD wiring
+src/scenes/VillageScene.ts   input, player, vehicles, rendering, HUD wiring, autosave
+src/scenes/MenuScene.ts      title menu: continue / new game
+src/scenes/PauseScene.ts     P / Esc pause over the village
+src/scenes/TouchScene.ts     tablet controls; src/ui/VirtualKeys.ts presses keys for them
+src/world/SavedGame.ts       the save's shape; src/systems/SaveStore.ts — IndexedDB
 src/world/layout.ts          places, roads, blocks, spots, hangouts (meters)
 src/world/DayEvents.ts       grandma, grandpa, kids, door/nap, pump, swim, glue
 src/world/Herd.ts            the herd and grandma's cow
@@ -113,7 +148,9 @@ and pictures as character grids in `portraits.json` / `items.json` /
   `.claude/launch.json` entry `game`).
 - In dev the game is `window.game`. The preview pane is often in the
   background at ~1 fps; drive it by `game.loop.sleep()` + `game.step(t, 16.67)`
-  and synthetic `KeyboardEvent`s. Tweens (fades) need real time to pass.
+  and synthetic `KeyboardEvent`s — give them `keyCode`, Phaser reads it.
+  Tweens (fades) need real time to pass. Without `?start=`/`?date=` the page
+  opens on the menu: Enter picks the first item.
 - In such test loops, close dialogue lines with E — Q does nothing on a plain
   line and an unbounded loop will freeze the page.
 - `import('/src/world/layout.ts')` in the page gives the layout for geometry
@@ -131,6 +168,11 @@ and pictures as character grids in `portraits.json` / `items.json` /
 - Cards (bench by grandma's by day, by the club in the evening) and fishing
   (where, and whose rod) — offered, not built.
 - Reproduce family houses literally or not.
+- Дядя Юра (always called that in lines) and his white «копейка» are the author's; his lines and
+  grandma's greeting were written from the author's outline.
+- The intro text was written by the agent from the author's outline (report
+  card, mum, train, uncle in Nizhny); details like the food bag, the
+  conductor's tea and the route are invented — the author may rewrite.
 - Real lines for later mornings, for the parents on 30 August and for the
   market; what grandma really sold and how they got to Chkalovsk.
 
@@ -143,5 +185,4 @@ In the author's interest order as last discussed:
    tomorrow" matter.
 2. **Evening and night** lighting.
 3. **Recognisable art** for the key places, from `MAP.md` descriptions.
-4. Saving the summer between browser sessions (now a reload starts over).
 5. Sounds; people noticing hunger/thirst; grandpa teaching about the IZH.

@@ -7,6 +7,9 @@ import type { Navigation } from './Navigation';
 
 type InviteKind = keyof typeof config.invites;
 
+/** Who has asked what today and how far small talk got, by name. */
+export type FriendsSave = Record<string, { asked: InviteKind[]; smallTalk: number }>;
+
 type Friend = {
   name: string;
   image: Phaser.GameObjects.Image;
@@ -84,6 +87,20 @@ export class Friends {
       if (!friend.plan && now >= friend.staysUntil) this.wander(friend);
     }
     this.callOut(now, player);
+  }
+
+  save(): FriendsSave {
+    return Object.fromEntries(this.friends.map((f) => [f.name, { asked: [...f.asked], smallTalk: f.smallTalk }]));
+  }
+
+  /** Back from a saved game: nobody asks twice; everyone starts from their usual spot. */
+  restore(saved: FriendsSave): void {
+    for (const friend of this.friends) {
+      const own = saved[friend.name];
+      if (!own) continue;
+      friend.asked = new Set(own.asked);
+      friend.smallTalk = own.smallTalk;
+    }
   }
 
   /** The friend within reach, if any, for the "E — говорить" prompt. */

@@ -88,6 +88,9 @@ export type Layout = {
   herdHomePath: Point[];
   /** Places villagers drift between when they have nothing better to do. */
   hangouts: Record<Hangout, Point>;
+  /** Uncle Yura's car on the first day: in along the Bralgino road to the club, and a loop back out. */
+  /** Uncle Yura's car on the first day: in to grandma's, ending at the stop, and the way out. */
+  arrival: { route: Point[]; out: Point[] };
 };
 
 export type Hangout = 'pump' | 'club' | 'schoolField' | 'ourField' | 'grandmaBench' | 'kiosk' | 'beach';
@@ -213,13 +216,14 @@ export function buildLayout(): Layout {
   ];
 
   const houses = generateHouses(roads, landmarks, bounds, shoreY);
+  // Front garden, between the house and the street.
+  const home = { x: 11, y: 2 };
 
   return {
     bounds,
     roads,
     blocks: [...landmarks, ...houses],
-    // Front garden, between the house and the street.
-    playerStart: { x: 11, y: 2 },
+    playerStart: home,
     // Back yard by the shed, on the far side of the house from the street (photo 13).
     bikeStart: { x: -10, y: 2 },
     spots: {
@@ -250,6 +254,32 @@ export function buildLayout(): Layout {
       beach: { x: swim.x + 6, y: shoreY + 10 },
     },
     herdHomePath: [herdMeeting, { x: mainRoute[0].x, y: grandmaHouse.h / 2 + 4 }],
+    arrival: arrivalRoute(center, turn, home),
+  };
+}
+
+/**
+ * Uncle Yura's car: in on the asphalt from the left past the club, right
+ * into Vysokaya street and down it to stop at grandma's front garden. It
+ * leaves on down the street.
+ */
+function arrivalRoute(center: Point, turn: Point, home: Point): Layout['arrival'] {
+  // Keeping to the right: the south half of the asphalt, the west half of the street going down.
+  const lane = 1.8;
+  const street = center.x - lane;
+  const stop = { x: street, y: home.y };
+  return {
+    route: [
+      offset(extend(turn, center, -60), 0, lane),
+      offset(extend(turn, center, -25), 0, lane),
+      { x: street - 6, y: center.y + lane },
+      { x: street, y: center.y + 10 },
+      { x: street, y: center.y + 30 },
+      { x: street, y: (center.y + stop.y) / 2 },
+      { x: street, y: stop.y - 30 },
+      stop,
+    ],
+    out: [stop, { x: street, y: stop.y + 60 }, { x: street, y: stop.y + 150 }],
   };
 }
 

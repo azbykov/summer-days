@@ -8,7 +8,8 @@ const ICON_SIZE = items.items.blackBread.icon.length * items.scale;
 
 /**
  * What the player carries, opened and closed with Q: one row of slots with
- * pixel icons, counts and the money in the pocket. A number picks a slot.
+ * pixel icons, counts and the money in the pocket. A number, a tap or a
+ * click picks a slot.
  * The game does not pause.
  */
 export class InventoryPanel {
@@ -21,6 +22,8 @@ export class InventoryPanel {
   constructor(
     scene: Phaser.Scene,
     private inventory: Inventory,
+    /** A slot tapped or clicked: the same as its number key. */
+    onPick: (slot: number) => void,
   ) {
     InventoryPanel.createIcons(scene);
     const width = inventory.size * SLOT + (inventory.size - 1) * GAP;
@@ -35,7 +38,14 @@ export class InventoryPanel {
     );
     for (let i = 0; i < inventory.size; i++) {
       const x = left + i * (SLOT + GAP);
-      this.root.add(scene.add.rectangle(x, top, SLOT, SLOT, 0x2a2c24).setOrigin(0, 0).setStrokeStyle(1, 0x55584a));
+      this.root.add(
+        scene.add
+          .rectangle(x, top, SLOT, SLOT, 0x2a2c24)
+          .setOrigin(0, 0)
+          .setStrokeStyle(1, 0x55584a)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerup', () => this.open && onPick(i)),
+      );
       // Slot number: with the inventory open, that key picks the slot.
       this.root.add(
         scene.add.text(x + 3, top + 2, `${i + 1}`, { fontFamily: 'monospace', fontSize: '10px', color: '#7a7a6a' }),
@@ -62,6 +72,8 @@ export class InventoryPanel {
       .text(left + width / 2, top + SLOT + 34, '', { fontFamily: 'monospace', fontSize: '13px', color: '#e8e2cf' })
       .setOrigin(0.5, 0);
     this.root.add(this.money);
+    // Children too, or taps on the slots would be measured against the scrolled map.
+    for (const child of this.root.list) (child as unknown as Phaser.GameObjects.Components.ScrollFactor).setScrollFactor(0);
   }
 
   get open(): boolean {

@@ -30,6 +30,9 @@ npm run dev
 
 Then open http://localhost:5173
 
+On a tablet in the same network: `npm run dev:lan` and open the address Vite
+prints as «Network» (http://192.168.…:5173).
+
 Other scripts:
 
 ```
@@ -38,6 +41,46 @@ npm run build
 ```
 
 ## Controls
+
+The game opens on a menu: «Продолжить» (with the date and time of the save)
+carries on with the saved summer, «Новая игра» starts it over — after a
+confirmation when there is a save, which it wipes. Arrows or W/S move, E or
+Enter picks, the mouse works too.
+
+«Новая игра» opens with a short story on black (`src/content/intro.json`):
+school is over, the report card, mum at the station, the train, the uncle in
+Nizhny Novgorod, the road to Высокая. Space, E, Enter or a tap goes to the
+next card, Esc skips it. Then the first day starts at 10:30 with дядя Юра's
+white «копейка» (VAZ 2101): in along the Bralgino road past the club and down
+Vysokaya street to grandma's. He talks on the way, and the car stands still
+while a line is up (E or a tap goes on): new books in the library at the club,
+the new container shop at the stop with ice cream and «Буратино», Лёха has
+been asking for the player, grandpa is unwell, grandma will have baked pies,
+help them, he and the aunt will come every weekend. At the house he gives a
+«Мото» magazine. Grandma comes out to meet the car, asks
+him in for tea, he drives off, and she gives the player a pie, the first
+morning's errands and ten rubles. The card with the date at the start of each day is
+skipped the same way, with Space or a tap.
+
+**Tablets.** On a touch screen (or with `?touch` on a desktop) on-screen
+controls appear over the village: a stick wherever the left thumb lands
+(pushed all the way, the player runs), E «действие», Q «сумка» and T «ждать»
+on the right, II for pause at the top right. They hide during talks, which
+are tapped: a tap on the panel goes on to the next line, the options and
+«да» / «нет» are buttons. Inventory slots, the menu and the pause screen are
+tapped too; the same works with a mouse. The menu has «Во весь экран» where
+the browser allows it; added to the home screen the game opens without the
+browser bars. Held upright, the page asks to turn the tablet. The picture
+keeps 16:9, so a 4:3 tablet shows bars above and below.
+
+P pauses: the clock, people and the herd all wait. Esc also pauses; Esc on the
+pause screen leaves for the menu. The game saves itself to the browser
+(IndexedDB): every morning, every few seconds while nobody is talking and
+nothing is fading, on pause and when the tab is hidden. A save made in the
+middle of a day comes back at that time and place with today's errands as they
+were; people walk from their usual spots again. During the trip to town only
+the morning is saved. When the summer ends the save is deleted; Esc goes back to
+the menu. Dev starts (`?start=`, `?date=`) skip the menu and never save.
 
 Arrow keys or WASD to walk or ride. Hold Shift to run on foot: faster, but it
 uses up stamina.

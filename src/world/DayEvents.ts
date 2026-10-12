@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import arrival from '../content/arrival.json';
 import day from '../content/day.json';
 import dialogue from '../content/dialogue.json';
 import friendsConfig from '../content/friends.json';
@@ -9,7 +10,7 @@ import { clockTime, type GameClock } from '../systems/GameClock';
 import type { Needs, Need } from '../systems/Needs';
 import type { DialogueBox, Line, Option } from '../ui/DialogueBox';
 import { TownBackdrop } from '../ui/TownBackdrop';
-import { Friends } from './Friends';
+import { Friends, type FriendsSave } from './Friends';
 import { Herd } from './Herd';
 import { Market } from './Market';
 import { Motorcycle, type MotorcycleFacts } from './Motorcycle';
@@ -22,6 +23,18 @@ import type { Summer } from './Summer';
 const KID_SPEED = 3;
 /** Eaten at home, the loaf goes first: the black bread is grandma's errand. */
 const HOME_BREAD: ItemId[] = ['loaf', shopConfig.errandItem as ItemId];
+
+/** How far today has gone, for a game saved in the middle of a day. */
+export type DaySave = {
+  breadDelivered: boolean;
+  grandpaVisitedToday: boolean;
+  football: 'notAsked' | 'played' | 'declined';
+  footballOffered: boolean;
+  eveningTalkDone: boolean;
+  motorcycleAtDawn: MotorcycleFacts;
+  cowMetBy: 'player' | 'grandma' | null;
+  friends: FriendsSave;
+};
 
 type Interaction = { at: Point; hint: string; run: () => void };
 
@@ -136,6 +149,39 @@ export class DayEvents {
     ]);
   }
 
+  save(): DaySave {
+    return {
+      breadDelivered: this.breadDelivered,
+      grandpaVisitedToday: this.grandpaVisitedToday,
+      football: this.football,
+      footballOffered: this.footballOffered,
+      eveningTalkDone: this.eveningTalkDone,
+      motorcycleAtDawn: { ...this.motorcycleAtDawn },
+      cowMetBy: this.herd.cowMetBy,
+      friends: this.friends.save(),
+    };
+  }
+
+  /**
+   * Instead of `start()` when a saved game picks up in the middle of a day:
+   * the morning talk and grandma's money already happened.
+   */
+  resume(saved: DaySave): void {
+    this.breadDelivered = saved.breadDelivered;
+    this.grandpaVisitedToday = saved.grandpaVisitedToday;
+    this.football = saved.football;
+    this.footballOffered = saved.footballOffered;
+    this.eveningTalkDone = saved.eveningTalkDone;
+    this.motorcycleAtDawn = { ...saved.motorcycleAtDawn };
+    this.herd.cowMetBy = saved.cowMetBy;
+    this.friends.restore(saved.friends);
+  }
+
+  /** Grandma and the player are in town: nothing on the map to save yet. */
+  get away(): boolean {
+    return this.summer.marketDay && this.market.grandmaAway(this.clock.minutes);
+  }
+
   /**
    * The player picked a slot in the open inventory. Some things can be eaten
    * or drunk; that is all they do — no stats, nothing gained.
@@ -183,6 +229,21 @@ export class DayEvents {
   private drinkFromPump(): void {
     this.needs.consume(needsConfig.pump);
     this.dialogueBox.say(lines('pumpDrink'));
+  }
+
+  /** First day: grandma walks out to the street to meet uncle Yura's car. */
+  meetCar(to: Point): void {
+    this.scene.tweens.add({ targets: this.grandma, x: to.x * this.px, y: to.y * this.px, duration: 1800, ease: 'Sine.easeInOut' });
+  }
+
+  /**
+   * The car has gone: instead of the morning talk, a pie and the first
+   * morning's errands, past its «Проснулся?» line, with the ten rubles.
+   */
+  welcome(): void {
+    this.skipMorning();
+    this.needs.consume(arrival.pie);
+    this.dialogueBox.choose([...(arrival.grandma as Line[]), ...lines('grandmaMorning').slice(1)], [this.askWhereGrandpaLives()]);
   }
 
   /** What the morning talk leaves the player with, for starts that skip it. */

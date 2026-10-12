@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Added to the home screen, the game opens without the browser's bars. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Summer Days" />
     <title>Summer Days</title>
     <style>
       html,
@@ -11,6 +16,31 @@
         height: 100%;
         background: #14160f;
         overflow: hidden;
+        /* Taps are the game's: no zoom, scroll, selection or callouts. */
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #rotate {
+        display: none;
+      }
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rotate {
+          display: flex;
+          position: fixed;
+          inset: 0;
+          z-index: 1;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          background: #14160f;
+          color: #e8e2cf;
+          font: 20px monospace;
+          text-align: center;
+        }
       }
       #game {
         width: 100%;
@@ -23,6 +53,7 @@
   </head>
   <body>
     <div id="game"></div>
+    <div id="rotate">Поверните планшет горизонтально</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
