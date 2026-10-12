@@ -1,5 +1,7 @@
 # Summer Days
 
+![The war memorial and the village club](docs/cover.png)
+
 Top-down prototype of a game about one summer in a Russian village.
 
 Working title only. See `docs/VISION.md`.
