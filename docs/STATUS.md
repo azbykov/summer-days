@@ -3,7 +3,7 @@
 Snapshot of where the prototype stands, what was decided with the author and
 how to work in this repo. Read this after `AGENTS.md`; the design documents
 (`VISION.md`, `GAME_DESIGN.md`, `WORLD.md`, `MAP.md`, `MVP.md`) still hold the
-reasoning. Last updated: 2026-10-09, `main` at `5319c8b`.
+reasoning. Last updated: 2026-10-12; describes `main` at `6fcb8b3`.
 
 ## Working with the author
 
